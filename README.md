@@ -1,45 +1,66 @@
-my kafka topic : 
+@Component
+@RequiredArgsConstructor
+public class KafkaConsumer {
 
-/*
- * KAFKA EVENT PAYLOAD (Before AES Encryption):
- * {
- * "eventId": "evt-uuid-1234",
- * "eventType": "LOGIN_OTP",
- * "txId": "tx-456",
- * "environment": "UAT",
- * "channels": ["SMS", "EMAIL"],
- * "templateId": "AUTH_LOGIN_OTP_V1",
- * "recipients": {
- * "mobile": "+919999999999",
- * "email": "user@sbi.co.in"
- * },
- * "templateData": {
- * "otpPlaintext": "847291",
- * "expiryMins": "5",
- * "userName": "Pratik"
- * },
- * "timestamp": "2026-06-12T10:00:00Z"
- * }
- */ 
+    private final EmailService emailService;
 
-request dto:
-public class EmailRequest {
+    @KafkaListener(
+            topics = "communication-topic",
+            groupId = "communication-group"
+    )
+    public void consume(CommunicationEvent event) {
 
-	@NotNull(message = "Recipient mail is mandatory")
-	@Email(message = "Invalid Email Format")
-	private String recipientMail;
-	
-	@Email(message = "Invalid Email Format")
-	private String ccToEmail;
+        System.out.println(event);
 
-	@NotNull(message = "templateID is mandatory")
-	private int templateID;
-
-	@NotNull(message = "Place holders are mandatory")
-	private Map<String,String> placeHolders;
-	
-	@NotNull(message = "Place holders are mandatory")
-	private Map<String,String> eventType;
-	
-
+    }
 }
+
+kafka listener 
+
+
+
+
+@Data
+public class Recipients {
+
+    private String mobile;
+
+    private String email;
+}
+
+
+@Data
+public class TemplateData {
+
+    private String otpPlaintext;
+
+    private String expiryMins;
+
+    private String userName;
+}
+
+
+@Data
+public class CommunicationEvent {
+
+    private String eventId;
+
+    private String eventType;
+
+    private String txId;
+
+    private String environment;
+
+    private List<String> channels;
+
+    private String templateId;
+
+    private Recipients recipients;
+
+    private TemplateData templateData;
+
+    private String timestamp;
+}
+
+
+
