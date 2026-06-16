@@ -1,66 +1,27 @@
-@Component
-@RequiredArgsConstructor
-public class KafkaConsumer {
+@KafkaListener(topics = "communication-topic")
+public void consume(CommunicationEvent event) {
 
-    private final EmailService emailService;
+    EmailRequest request = new EmailRequest();
 
-    @KafkaListener(
-            topics = "communication-topic",
-            groupId = "communication-group"
-    )
-    public void consume(CommunicationEvent event) {
+    request.setRecipientMail(
+            event.getRecipients().getEmail());
 
-        System.out.println(event);
+    Map<String,String> placeholders =
+            new HashMap<>();
 
-    }
+    placeholders.put(
+            "otp",
+            event.getTemplateData().getOtpPlaintext());
+
+    placeholders.put(
+            "expiryMins",
+            event.getTemplateData().getExpiryMins());
+
+    placeholders.put(
+            "userName",
+            event.getTemplateData().getUserName());
+
+    request.setPlaceHolders(placeholders);
+
+    emailService.sendEmail(request);
 }
-
-kafka listener 
-
-
-
-
-@Data
-public class Recipients {
-
-    private String mobile;
-
-    private String email;
-}
-
-
-@Data
-public class TemplateData {
-
-    private String otpPlaintext;
-
-    private String expiryMins;
-
-    private String userName;
-}
-
-
-@Data
-public class CommunicationEvent {
-
-    private String eventId;
-
-    private String eventType;
-
-    private String txId;
-
-    private String environment;
-
-    private List<String> channels;
-
-    private String templateId;
-
-    private Recipients recipients;
-
-    private TemplateData templateData;
-
-    private String timestamp;
-}
-
-
-
