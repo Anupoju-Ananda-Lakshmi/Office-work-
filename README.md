@@ -1,27 +1,25 @@
-@KafkaListener(topics = "communication-topic")
-public void consume(CommunicationEvent event) {
+@Slf4j
+public class EmailTemplateUtil {
 
-    EmailRequest request = new EmailRequest();
+	public static String buildEmailBody(String templateName, Map<String, String> values) throws IOException {
+        String template = EmailTemplateUtil.loadEmailTemplate(templateName);
+        StrSubstitutor substitutor = new StrSubstitutor(values);
+        return substitutor.replace(template);
+    }
 
-    request.setRecipientMail(
-            event.getRecipients().getEmail());
+    public static String loadEmailTemplate(String fileName) throws IOException {
 
-    Map<String,String> placeholders =
-            new HashMap<>();
+        String path = "email-templates/" + fileName;
 
-    placeholders.put(
-            "otp",
-            event.getTemplateData().getOtpPlaintext());
+        try (InputStream is = EmailTemplateUtil.class.getClassLoader().getResourceAsStream(path)) {
+            if (is == null) {
+                throw new IOException("File not found: " + path);
+            }
+            return new String(is.readAllBytes(), StandardCharsets.UTF_8);
+        }
 
-    placeholders.put(
-            "expiryMins",
-            event.getTemplateData().getExpiryMins());
+    }
 
-    placeholders.put(
-            "userName",
-            event.getTemplateData().getUserName());
-
-    request.setPlaceHolders(placeholders);
-
-    emailService.sendEmail(request);
 }
+
+
