@@ -1,6 +1,6 @@
 package com.fincore.CommunicationService.client;
 
-import java.io.BufferedReader; 
+import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
@@ -9,194 +9,110 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
-import org.json.JSONArray;
 import org.json.JSONObject;
 
 import com.fincore.CommunicationService.exception.CommunicationExceptions.VendorDeliveryException;
-
-// Required imports for SSL bypass
-import javax.net.ssl.*;
-import java.security.cert.X509Certificate;
 
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class EmailGatewayClient {
 
-	private static final String URL = "url";
-	private static final String API_KEY = "api_key";
-	private static final String SENDER_ID = "senderId";
-	private static final String TO_EMAIL = "toEmail";
-	private static final String CC_TO_EMAIL = "ccToEmail";
-	private static final String EMAIL_BODY = "emailBody";
-	private static final String SUBJECT = "subject";
+    private static final String URL = "url";
+    private static final String API_KEY = "api_key";
+    private static final String SENDER_ID = "senderId";
 
-	public static int sendEmail(Map<String, Object> emailRequest) {
+    public String sendEmail(Map<String, String> configMap,
+                            JSONObject requestBody) {
 
-		HttpURLConnection emailApiConnection = null;
-		log.info("Connection created");
-		try {
-			// Email Request Values
-			String apiUrl = emailRequest.get(URL).toString();
-			String apiKey = emailRequest.get(API_KEY).toString();
-			String senderEmail = emailRequest.get(SENDER_ID).toString();
-			String recipientMail = emailRequest.get(TO_EMAIL).toString();
-			String ccToEmail = emailRequest.get(CC_TO_EMAIL).toString();
-			String emailBody = emailRequest.get(EMAIL_BODY).toString();
-			String subject = emailRequest.get(SUBJECT).toString();
+        HttpURLConnection connection = null;
 
-			// Open Connection
-			URL url = new URL(apiUrl);
-			emailApiConnection = (HttpURLConnection) url.openConnection();
-			log.info("Connection opened");
-			emailApiConnection.setRequestMethod("POST");
-			emailApiConnection.setDoOutput(true);
+        try {
 
-			// ARCHITECTURE MANDATE: Reduced timeouts from 10s to 3s to prevent Kafka thread
-			// starvation
-			emailApiConnection.setConnectTimeout(3000);
-			emailApiConnection.setReadTimeout(3000);
+            // Validation
+            if (configMap == null) {
+                throw new VendorDeliveryException("Vendor configuration is null");
+            }
 
-			// --- BYPASS SSL VERIFICATION FOR THIS CONNECTION ---
-			if (emailApiConnection instanceof HttpsURLConnection) {
-				HttpsURLConnection httpsConnection = (HttpsURLConnection) emailApiConnection;
-				try {
-					TrustManager[] trustAllCerts = new TrustManager[] { new X509TrustManager() {
-						public X509Certificate[] getAcceptedIssuers() {
-							return null;
-						}
+            if (configMap.get(URL) == null || configMap.get(URL).isBlank()) {
+                throw new VendorDeliveryException("Vendor URL is missing");
+            }
 
-						public void checkClientTrusted(X509Certificate[] certs, String authType) {
-						}
+            if (configMap.get(API_KEY) == null || configMap.get(API_KEY).isBlank()) {
+                throw new VendorDeliveryException("Vendor API key is missing");
+            }
 
-						public void checkServerTrusted(X509Certificate[] certs, String authType) {
-						}
-					} };
-					SSLContext sc = SSLContext.getInstance("TLS");
-					sc.init(null, trustAllCerts, new java.security.SecureRandom());
-					httpsConnection.setSSLSocketFactory(sc.getSocketFactory());
-					httpsConnection.setHostnameVerifier((hostname, session) -> true);
-				} catch (Exception e) {
-					log.error("Failed to set SSL bypass: ", e);
-				}
-			}
-			// -------------------------------------------------------------
+            URL url = new URL(configMap.get(URL));
 
-			// Request headers
-			emailApiConnection.setRequestProperty("Content-Type", "application/json");
-			emailApiConnection.setRequestProperty("Accept", "application/json");
-			emailApiConnection.setRequestProperty("api_key", apiKey);
-			emailApiConnection.setDoOutput(true);
+            connection = (HttpURLConnection) url.openConnection();
 
-			log.info("Done Setting properties");
+            connection.setRequestMethod("POST");
+            connection.setRequestProperty("Content-Type", "application/json");
+            connection.setRequestProperty("api-key", configMap.get(API_KEY));
+            connection.setDoOutput(true);
 
-			// Sender Details
-			JSONObject senderJson = new JSONObject();
-			senderJson.put("email", senderEmail);
-			senderJson.put("name", "FINCORE");
+            // Send request body
+            try (OutputStream os = connection.getOutputStream()) {
 
-			// Email Content
-			JSONObject emailContentJson = new JSONObject();
-			emailContentJson.put("type", "html");
-			emailContentJson.put("value", emailBody);
+                byte[] input =
+                        requestBody.toString().getBytes(StandardCharsets.UTF_8);
 
-			JSONArray contentArray = new JSONArray();
-			contentArray.put(emailContentJson);
+                os.write(input, 0, input.length);
+            }
 
-			// Recipient Details
-			JSONObject recipientJson = new JSONObject();
-			recipientJson.put("email", recipientMail);
+            int responseCode = connection.getResponseCode();
 
-			JSONArray recipientArray = new JSONArray();
-			recipientArray.put(recipientJson);
+            log.info("Vendor Response Code : {}", responseCode);
 
-			// Custom Attributes
-			JSONObject attributesJson = new JSONObject();
-			attributesJson.put("LEAD", "Andy Dwyer");
-			attributesJson.put("BAND", "Mouse Rat");
+            // Validate vendor response
+            if (responseCode != HttpURLConnection.HTTP_OK
+                    && responseCode != HttpURLConnection.HTTP_CREATED
+                    && responseCode != HttpURLConnection.HTTP_ACCEPTED) {
 
-			// Personalization
-			JSONObject personalizationsJson = new JSONObject();
-			personalizationsJson.put("to", recipientArray);
-			personalizationsJson.put("attributes", attributesJson);
+                throw new VendorDeliveryException(
+                        "Vendor API failed with response code : "
+                                + responseCode);
+            }
 
-			// CC details
-			if (emailRequest.containsKey("ccToEmail")) {
-				JSONObject ccRecipientJson = new JSONObject();
-				ccRecipientJson.put("email", ccToEmail);
+            InputStream is = connection.getInputStream();
 
-				JSONArray ccArray = new JSONArray();
-				ccArray.put(ccRecipientJson);
-				personalizationsJson.put("cc", ccArray);
-			}
+            StringBuilder response = new StringBuilder();
 
-			personalizationsJson.put("token_to", "8693839845");
-			personalizationsJson.put("token_cc", "MSGID657243");
-			personalizationsJson.put("token_bcc", "MSGID657244");
+            try (BufferedReader br =
+                         new BufferedReader(new InputStreamReader(is))) {
 
-			JSONArray personalizationsJsonArray = new JSONArray();
-			personalizationsJsonArray.put(personalizationsJson);
+                String line;
 
-			// Tracking Settings
-			JSONObject trackingSettingsJson = new JSONObject();
-			trackingSettingsJson.put("open_track", true);
-			trackingSettingsJson.put("click_track", true);
-			trackingSettingsJson.put("unsubscribe_track", true);
+                while ((line = br.readLine()) != null) {
+                    response.append(line);
+                }
+            }
 
-			log.info("building email request json");
+            log.info("Vendor Response : {}", response);
 
-			// Final Request JSON
-			JSONObject emailRequestJson = new JSONObject();
-			emailRequestJson.put("from", senderJson);
-			emailRequestJson.put("subject", subject);
-			emailRequestJson.put("content", contentArray);
-			emailRequestJson.put("personalizations", personalizationsJsonArray);
-			emailRequestJson.put("settings", trackingSettingsJson);
+            return response.toString();
 
-			String finalRequestBody = emailRequestJson.toString();
+        } catch (VendorDeliveryException e) {
 
-			log.info("finalRequestBody   " + finalRequestBody);
+            log.error("Vendor Delivery Exception : {}", e.getMessage());
 
-			// Send Request
-			log.info("sending request");
-			try (OutputStream outputStream = emailApiConnection.getOutputStream()) {
-				byte[] requestBytes = finalRequestBody.getBytes(StandardCharsets.UTF_8);
-				outputStream.write(requestBytes);
-				log.info("Request sent");
-			}
-			// Read response
-			int responseCode = emailApiConnection.getResponseCode();
-			log.info("responseCode" + responseCode);
-			InputStream responseStream = (responseCode >= 200 && responseCode < 300)
-					? emailApiConnection.getInputStream()
-					: emailApiConnection.getErrorStream();
+            throw e;
 
-			if (responseStream != null) {
-				try (BufferedReader reader = new BufferedReader(
-						new InputStreamReader(responseStream, StandardCharsets.UTF_8))) {
+        } catch (Exception e) {
 
-					StringBuilder responseBody = new StringBuilder();
-					String line;
+            log.error("Exception while calling Email Vendor API", e);
 
-					while ((line = reader.readLine()) != null) {
-						responseBody.append(line).append("\n");
-					}
+            throw new VendorDeliveryException(
+                    "Error occurred while calling Email Vendor API", e);
 
-					log.info("Server Response: " + responseBody);
-				}
-			} else {
-				log.info("No response body received. HTTP " + responseCode);
-			}
+        } finally {
 
-			return responseCode;
+            if (connection != null) {
 
-		} catch (VendorDeliveryException e) {
-			log.error("Error occurred while sending Email " + e);
-		} finally {
-			if (emailApiConnection != null) {
-				emailApiConnection.disconnect();
-			}
-		}
-		return 0;
-	}
+                connection.disconnect();
+
+                log.info("HTTP connection disconnected successfully.");
+            }
+        }
+    }
 }
