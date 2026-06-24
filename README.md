@@ -1,252 +1,96 @@
-package com.fincore.CommunicationService.consumer;
+package com.fincore.CommunicationService.model;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fincore.CommunicationService.dto.KafkaEvent;
-import com.fincore.CommunicationService.exception.CommunicationExceptions.DecryptionFailureException;
-import com.fincore.CommunicationService.exception.CommunicationExceptions.InvalidPayloadException;
-import com.fincore.CommunicationService.exception.CommunicationExceptions.TemplateNotFoundException;
-import com.fincore.CommunicationService.exception.CommunicationExceptions.VendorDeliveryException;
-import com.fincore.CommunicationService.service.CommunicationAuditService;
-import com.fincore.CommunicationService.service.EmailService;
-import com.fincore.CommunicationService.service.SmsService;
-import com.fincore.commonutilities.util.AesEncryptionUtil;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.kafka.annotation.DltHandler;
-import org.springframework.kafka.annotation.EnableKafka;
-import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.kafka.annotation.RetryableTopic;
-import org.springframework.kafka.retrytopic.TopicSuffixingStrategy;
-import org.springframework.kafka.support.Acknowledgment;
-import org.springframework.kafka.support.KafkaHeaders;
-import org.springframework.messaging.handler.annotation.Header;
-import org.springframework.messaging.handler.annotation.Payload;
-import org.springframework.retry.annotation.Backoff;
-import org.springframework.stereotype.Component;
+import jakarta.persistence.Column;
+import jakarta.persistence.Embeddable;
+import lombok.Getter;
+import lombok.Setter;
 
-import javax.crypto.BadPaddingException;
-import javax.crypto.IllegalBlockSizeException;
-import java.security.GeneralSecurityException;
-import java.time.Duration;
-import java.util.Map;
+import java.io.Serializable;
+import java.util.Objects;
 
+@Setter
+@Getter
+@Embeddable
+public class TemplateId implements Serializable {
 
-/**
- * <p>A non-blocking Kafka consumer responsible for processing high-priority OTP events.
- * This component handles decryption, validation, and dispatching of OTPs via SMS or Email.</p>
- *
- * <p><strong>Retry Architecture:</strong></p>
- * <ul>
- *   <li><strong>Attempts:</strong> 4 total (1 initial + 3 retries).</li>
- *   <li><strong>Backoff Strategy:</strong> Exponential delay (2s, 4s, 8s).</li>
- *   <li><strong>Retryable Exceptions:</strong> Transient errors like {@link VendorDeliveryException} (e.g., API timeouts).</li>
- *   <li><strong>Non-Retryable Exceptions:</strong> Deterministic errors such as {@link DecryptionFailureException},
- *       {@link InvalidPayloadException}, and {@link TemplateNotFoundException} bypass retries and go straight to the DLQ.</li>
- * </ul>
- *
- * <p>Failed messages are routed to a Dead Letter Queue (DLQ) for manual inspection or further automated processing.</p>
- *
- * @author SHUBHANKAR (v1018405)
- * @see RetryableTopic
- * @see DltHandler
- * @since 2026-06-22
- */
-@Slf4j
-@Component
-@RequiredArgsConstructor
-@EnableKafka
-public class PriorityOtpConsumer {
+    @Column(name = "TEMPLATE_CODE", length = 100, nullable = false)
+    private String templateCode;
 
-    private final ObjectMapper mapper;
-    private final AesEncryptionUtil aesUtil;
-    private final StringRedisTemplate redisTemplate;
-    private final CommunicationAuditService auditService;
-    private final SmsService smsService;
-    private final EmailService emailService;
+    @Column(name = "CHANNEL", length = 20, nullable = false)
+    private String channel;
 
-    @Value("${security.internal.kafka-aes-key}")
-    private String internalAesKey;
+    @Column(name = "LANGUAGE_CODE", length = 5, nullable = false)
+    private String languageCode;
 
-    /**
-     * <p>Consumes OTP events from the priority Kafka topic.</p>
-     *
-     * <p>This method orchestrates the following steps:</p>
-     * <ol>
-     *   <li>Deserializes the incoming message.</li>
-     *   <li>Decrypts sensitive payload data using the configured AES key.</li>
-     *   <li>Maintain the channel Idempotency [SMS, EMAIL using redis idempotencyKe]</li>
-     *   <li>Dispatches the OTP via the appropriate channel (SMS/Email).</li>
-     *   <li>Audits the transaction status.</li>
-     * </ol>
-     *
-     * <p>Transient failures (e.g., vendor timeouts) trigger the configured retry mechanism.
-     * Permanent failures (e.g., decryption errors) immediately route the message to the DLQ.</p>
-     *
-     * @param message        The raw JSON payload from the Kafka topic.
-     * @param acknowledgment The Kafka acknowledgment handle to commit offsets upon successful processing.
-     * @throws JsonProcessingException    if the message cannot be deserialized.
-     * @throws VendorDeliveryException    if the external vendor API fails (triggers retry).
-     * @throws DecryptionFailureException if payload decryption fails (triggers DLQ).
-     * @throws InvalidPayloadException    if the message structure is invalid (triggers DLQ).
-     * @throws TemplateNotFoundException  if the required OTP template is missing (triggers DLQ).
-     */
-    @RetryableTopic(
-            attempts = "4",
-            backoff = @Backoff(delay = 2000, multiplier = 2.0),
-            topicSuffixingStrategy = TopicSuffixingStrategy.SUFFIX_WITH_INDEX_VALUE,
-            dltTopicSuffix = "-dlq",
-            exclude = {
-                    DecryptionFailureException.class,
-                    InvalidPayloadException.class,
-                    TemplateNotFoundException.class
-            }
-    )
-    @KafkaListener(
-            topics = "fincore.auth.otp.priority",
-            groupId = "communication-login-otp-group-v7",
-            containerFactory = "priorityOtpContainerFactory"
-    )
-    public void consumeOtpEvent(@Payload String message, Acknowledgment acknowledgment) throws JsonProcessingException {
-
-        log.info("Received raw Kafka message: {}", message);
-        String txId = "UNKNOWN";
-
-        String eventId = "UNKNOWN";
-
-        try {
-            // 1. DESERIALIZATION
-            KafkaEvent event;
-            try {
-                event = mapper.readValue(message, KafkaEvent.class);
-                txId = event.getTxId();
-                eventId = event.getEventId();
-            } catch (Exception e) {
-                throw new InvalidPayloadException("Malformed JSON Payload: " + e.getMessage());
-            }
-
-            if (txId == null || eventId == null || event.getPayload() == null) {
-                throw new InvalidPayloadException("Missing txId or eventId or encrypted payload");
-            }
-
-            // 2. DECRYPTION of personal data using aes key synced with login service
-            String decryptedJson;
-            try {
-                decryptedJson = aesUtil.decrypt(event.getPayload(), internalAesKey);
-            } catch (BadPaddingException | IllegalBlockSizeException e) {
-                log.error("SECURITY ALERT: Decryption failed for eventId={}. Data tampered or key mismatch.", eventId, e);
-                throw new DecryptionFailureException("AES Decryption Failed: Invalid Padding", e);
-            } catch (GeneralSecurityException e) {
-                throw new DecryptionFailureException("AES Decryption Failed", e);
-            }
-
-            // Map decrypted JSON into a generic map to pass to TemplateService
-            Map<String, Object> templateDataMap = mapper.readValue(decryptedJson, new TypeReference<>() {
-            });
-
-            // Log process start event
-            auditService.logAttempt(event.getEventId(), txId, event.getTemplateId(), event.getChannel(), event.getRecipient());
-
-            // Track partial failures to trigger Spring Kafka Retry
-            boolean requiresRetry = false;
-
-            // 3. CHANNEL ROUTING & IDEMPOTENCY (for sms and email - if one fail only that needs to be retried not the both)
-            for (String channel : event.getChannel()) {
-                String idempotencyKey = "COMM_IDEMP:" + eventId + ":" + channel.toUpperCase();
-
-                Boolean alreadyProcessed = redisTemplate.opsForValue().setIfAbsent(idempotencyKey, "PROCESSED", Duration.ofMinutes(15));
-                log.info("Already processed value : {}", alreadyProcessed);
-                if (Boolean.FALSE.equals(alreadyProcessed)) {
-                    log.info("Idempotency hit: Already processed {} for eventId={}. Skipping.", channel, eventId);
-                    continue;
-                }
-
-                try {
-                    if ("SMS".equalsIgnoreCase(channel)) {
-//                        smsService.sendSms(event.getEnvironment(), event.getTemplateId(), event.getRecipient().getMobile(), templateDataMap);
-                    } else if ("EMAIL".equalsIgnoreCase(channel)) {
-                        emailService.sendEmail(event.getTemplateId(), event.getRecipient().getEmail(), templateDataMap);
-                    }
-                } catch (Exception e) {
-                    // If a channel fails, we must remove the idempotency key so it can be retried
-                    Boolean deleted = redisTemplate.delete(idempotencyKey);
-                    log.error(
-                            "Deleted key={} result={}",
-                            idempotencyKey,
-                            deleted
-                    );
-                    log.error("Vendor dispatch failed for eventId={} channel={}. Exception: {}", eventId, channel, e.getMessage());
-                    requiresRetry = true;
-                }
-            }
-
-            // 4. RESOLUTION
-            if (requiresRetry) {
-                // By throwing this, Spring Kafka routes the message to the Retry Topic
-                throw new VendorDeliveryException("One or more channels failed to deliver.", null);
-            }
-
-            // Only acknowledge and log success if all channels succeeded or were skipped idempotently.
-            auditService.logSuccess(event.getEventId());
-            acknowledgment.acknowledge();
-            log.info("Successfully processed Tier-0 OTP Event for txId={}", txId);
-
-        } catch (DecryptionFailureException | InvalidPayloadException | TemplateNotFoundException e) {
-            log.error("Fatal deterministic error processing txId={}. Routing to DLQ. Reason: {}", txId, e.getMessage());
-            throw e;
-        } catch (Exception e) {
-            log.error("Unexpected error processing Kafka message", e);
-            throw e;
-        }
+    public TemplateId() {
     }
 
-
-    /**
-     * <p>Handles messages that have failed processing and been routed to the Dead Letter Queue (DLQ).</p>
-     *
-     * <p>This method is automatically invoked by Spring Kafka when:</p>
-     * <ol>
-     *   <li>All 4 retry attempts for retryable exceptions (e.g., {@link VendorDeliveryException}) are exhausted.</li>
-     *   <li>A non-retryable exception (e.g., {@link DecryptionFailureException}) is thrown during processing.</li>
-     * </ol>
-     *
-     * <p>Typical actions include logging the failure details, auditing the error.</p>
-     * <p>
-     * {@code @todo} implement potential alert functionality.
-     *
-     * @param message          The original Kafka message payload that failed processing.
-     * @param headerTopic      The name of the original topic from which the message was consumed.
-     * @param exceptionMessage The message of the final exception that caused the DLQ routing.
-     */
-    @DltHandler
-    public void handleDltPayment(
-            String message,
-            @Header(KafkaHeaders.ORIGINAL_TOPIC) String headerTopic,
-            @Header(KafkaHeaders.EXCEPTION_MESSAGE) String exceptionMessage) {
-
-        log.error("=====================================================");
-        log.error("DLQ ALERT: OTP Delivery Permanently Failed!");
-        log.error("Original Topic: {}", headerTopic);
-        log.error("Failure Reason: {}", exceptionMessage);
-        log.error("Failed Message Payload: {}", message);
-        log.error("=====================================================");
-
-        // Extract txId and eventId from the raw string manually for the audit
-        String txId = "UNKNOWN";
-        String eventId = "UNKNOWN";
-        try {
-            KafkaEvent failedEvent = mapper.readValue(message, KafkaEvent.class);
-            txId = failedEvent.getTxId();
-            eventId = failedEvent.getEventId();
-        } catch (Exception ignored) {
-            // doing nothing if any exception is there.
-        }
-
-        // Log the failure
-        auditService.logFailure(eventId, txId, exceptionMessage);
+    public TemplateId(String templateCode, String channel, String languageCode) {
+        this.templateCode = templateCode;
+        this.channel = channel;
+        this.languageCode = languageCode;
     }
+
+    // Equals and HashCode are MANDATORY for composite keys
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        TemplateId that = (TemplateId) o;
+        return Objects.equals(templateCode, that.templateCode) &&
+                Objects.equals(channel, that.channel) &&
+                Objects.equals(languageCode, that.languageCode);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(templateCode, channel, languageCode);
+    }
+}
+
+
+
+package com.fincore.CommunicationService.model;
+
+import jakarta.persistence.*;
+import lombok.Data;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+import java.time.LocalDateTime;
+
+@Data
+@Entity
+@Table(name = "COMM_TEMPLATE_MASTER")
+public class CommTemplateMaster {
+
+    @EmbeddedId
+    private TemplateId id;
+
+    @Column(name = "SUBJECT", length = 255)
+    private String subject;
+
+    @Lob
+    @Column(name = "BODY_CONTENT", nullable = false, columnDefinition = "CLOB")
+    private String bodyContent;
+
+    @Column(name = "IS_ACTIVE", length = 1, nullable = false)
+    private String isActive;
+
+    @Column(name = "CREATED_BY", length = 50, nullable = false)
+    private String createdBy;
+
+    @CreationTimestamp
+    @Column(name = "CREATED_AT", nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    @Column(name = "UPDATED_BY", length = 50)
+    private String updatedBy;
+
+    @UpdateTimestamp
+    @Column(name = "UPDATED_AT")
+    private LocalDateTime updatedAt;
 
 }
+
+
+
