@@ -1,105 +1,78 @@
 package com.fincore.CommunicationService.service;
 
 import com.fincore.CommunicationService.exception.CommunicationExceptions;
-import com.fincore.CommunicationService.model.CommTemplateMaster;
-import com.fincore.CommunicationService.model.TemplateId;
-import com.fincore.CommunicationService.repository.TemplateRepository;
-import freemarker.template.Configuration;
-import freemarker.template.Template;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
+import freemarker.template.Template;
+import freemarker.template.TemplateException;
 
 import java.io.IOException;
-import java.io.StringReader;
+import java.io.StringWriter;
+import java.util.Map;
 
 /**
- * <p>Handles retrieval and caching of compiled FreeMarker templates.</p>
+ * <p>A high-speed template rendering engine optimized for low-latency OTP delivery.</p>
  *
- * <p>This service isolates caching logic from business logic, ensuring clean separation
- * of concerns and proper Spring AOP proxy interception without self-invocation hacks.</p>
+ * <p>This service delegates caching and compilation to {@link TemplateCacheService},
+ * ensuring strict separation of concerns and thread-safe proxy interception.</p>
  *
  * @author SHUBHANKAR (v1018405)
  * @since 2026-06-22
+ * @see TemplateCacheService
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class TemplateCacheService {
+public class TemplateEngineService {
 
-    private final TemplateRepository templateRepository;
-    private final Configuration freeMarkerConfig;
+    private final TemplateCacheService templateCacheService;
 
     /**
-     * <p>Fetches the template CLOB from Oracle and compiles it into a FreeMarker {@link Template} object.</p>
+     * <p>Renders the final output string by merging dynamic data into a pre-compiled template.</p>
      *
-     * <p><strong>Caching Strategy:</strong></p>
-     * <ul>
-     *   <li><strong>Key:</strong> Composite ({@code code:channel:language}).</li>
-     *   <li><strong>TTL:</strong> 12 hours (configured externally).</li>
-     *   <li><strong>Condition:</strong> Caches only if result is not {@code null}.</li>
-     * </ul>
+     * <p><strong>Security Note:</strong> This method is <em>not</em> cached. It processes dynamic
+     * variables on every request to prevent cross-pollination data leaks.</p>
      *
-     * @param templateCode The unique template identifier.
-     * @param channel      The communication channel.
-     * @param language     The locale language code.
-     * @return The compiled FreeMarker {@link Template} object.
-     * @throws CommunicationExceptions.TemplateNotFoundException   if the template is not found or inactive.
-     * @throws CommunicationExceptions.TemplateProcessingException if compilation fails.
+     * @param templateCode The unique identifier for the template.
+     * @param channel The communication channel.
+     * @param language The locale language code.
+     * @param templateData A map of dynamic key-value pairs to bind to the template.
+     * @return The fully rendered string ready for delivery.
+     * @throws CommunicationExceptions.TemplateProcessingException if variable binding fails.
      */
-    @Cacheable(value = "templates", key = "#templateCode + ':' + #channel + ':' + #language", unless = "#result == null")
-    public Template getCompiledTemplate(String templateCode, String channel, String language) {
-        log.info("L1 CACHE MISS: Fetching and Compiling Template {} for {} from Oracle DB.", templateCode, channel);
+    public String renderTemplate(String templateCode, String channel, String language, Map<String, Object> templateData) {
+        // 1. Fetch the cached, pre-compiled Template AST Object from the dedicated cache service
+        Template compiledTemplate = templateCacheService.getCompiledTemplate(templateCode, channel, language);
 
-        // 1. Database Lookup
-        CommTemplateMaster tmpl = templateRepository.findById(new TemplateId(templateCode, channel, language))
-                .orElseThrow(() -> new CommunicationExceptions.TemplateNotFoundException("Template not found in Oracle: " + templateCode));
-
-        if (!"Y".equalsIgnoreCase(tmpl.getIsActive().trim())) {
-            throw new CommunicationExceptions.TemplateNotFoundException("Template is disabled: " + templateCode);
-        }
-
-        String rawClobContent = tmpl.getBodyContent();
-
-        // 2. Compile into Abstract Syntax Tree (AST)
-        try {
-            return new Template(templateCode, new StringReader(rawClobContent), freeMarkerConfig);
-        } catch (IOException e) {
-            log.error("Syntax error in FreeMarker template {}.", templateCode, e);
-            throw new CommunicationExceptions.TemplateProcessingException("Syntax error compiling template: " + templateCode, e);
+        // 2. Merge dynamic data (OTP, Names) into the template
+        try (StringWriter writer = new StringWriter()) {
+            compiledTemplate.process(templateData, writer);
+            return writer.toString();
+        } catch (IOException | TemplateException e) {
+            log.error("Fatal error binding dynamic variables to template {}.", templateCode, e);
+            throw new CommunicationExceptions.TemplateProcessingException("Failed to bind dynamic variables to template: " + templateCode, e);
         }
     }
 
     /**
-     * <p>Retrieves the cached subject line for a specific template.</p>
+     * <p>Public API to retrieve a template subject.</p>
      *
-     * @param templateCode The unique template identifier.
-     * @param channel      The communication channel.
-     * @param language     The locale language code.
+     * @param templateCode The unique identifier for the template.
+     * @param channel The communication channel.
+     * @param language The locale language code.
      * @return The subject line string.
-     * @throws CommunicationExceptions.TemplateNotFoundException if the template does not exist.
      */
-    @Cacheable(value = "template_subjects", key = "#templateCode + ':' + #channel + ':' + #language")
     public String getTemplateSubject(String templateCode, String channel, String language) {
-        CommTemplateMaster tmpl = templateRepository.findById(new TemplateId(templateCode, channel, language))
-                .orElseThrow(() -> new CommunicationExceptions.TemplateNotFoundException("Template not found in Oracle: " + templateCode));
-
-        if (!"Y".equalsIgnoreCase(tmpl.getIsActive().trim())) {
-            throw new CommunicationExceptions.TemplateNotFoundException("Template is disabled: " + templateCode);
-        }
-
-        return tmpl.getSubject();
+        return templateCacheService.getTemplateSubject(templateCode, channel, language);
     }
 
     /**
-     * <p>Evicts all entries from the template caches.</p>
+     * <p>Emergency cache flush mechanism.</p>
      *
-     * @see TemplateEngineService#flushTemplateCache()
+     * <p>Delegates to {@link TemplateCacheService} to evict all cached templates.</p>
      */
-    @CacheEvict(value = {"templates", "template_subjects"}, allEntries = true)
-    public void flushCache() {
-        log.warn("ADMIN ACTION: All communication templates evicted from L1/L2 Cache.");
+    public void flushTemplateCache() {
+        templateCacheService.flushCache();
     }
 }
