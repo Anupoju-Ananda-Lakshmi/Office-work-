@@ -1,96 +1,120 @@
-package com.fincore.CommunicationService.model;
+package com.fincore.CommunicationService.service;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Embeddable;
-import lombok.Getter;
-import lombok.Setter;
+import com.fincore.CommunicationService.config.AsyncConfig;
+import com.fincore.CommunicationService.dto.Recipients;
+import com.fincore.CommunicationService.model.CommAuditLog;
+import com.fincore.CommunicationService.repository.CommAuditLogRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.CannotCreateTransactionException;
 
-import java.io.Serializable;
-import java.util.Objects;
+import java.util.List;
 
-@Setter
-@Getter
-@Embeddable
-public class TemplateId implements Serializable {
+/**
+ * <p>A non-blocking auditing service responsible for storing various logging events
+ * in the database.</p>
+ *
+ * <p>This service utilizes a dedicated thread pool defined in the {@link AsyncConfig}
+ * class to ensure asynchronous processing without blocking the main application flow.</p>
+ *
+ * @author SHUBHANKAR (v1018405)
+ * @since 2026-06-22
+ * @see AsyncConfig
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class CommunicationAuditService {
 
-    @Column(name = "TEMPLATE_CODE", length = 100, nullable = false)
-    private String templateCode;
+    private final CommAuditLogRepository auditRepository;
 
-    @Column(name = "CHANNEL", length = 20, nullable = false)
-    private String channel;
+    @Async("auditThreadPool")
+    public void logAttempt(String eventId, String txId, String templateId, List<String> channels, Recipients recipients) {
+        try {
+            String maskedData = maskRecipients(recipients);
+            String channelsJoined = channels != null ? String.join(",", channels) : "UNKNOWN";
 
-    @Column(name = "LANGUAGE_CODE", length = 5, nullable = false)
-    private String languageCode;
+            CommAuditLog logEntry = CommAuditLog.builder()
+                    .eventId(eventId)
+                    .txId(txId != null ? txId : "UNKNOWN")
+                    .templateId(templateId)
+                    .channels(channelsJoined)
+                    .maskedRecipients(maskedData)
+                    .status("PROCESSING")
+                    .build();
 
-    public TemplateId() {
+            auditRepository.save(logEntry);
+            log.debug("Audit: Initial processing logged for eventId={}", eventId);
+
+        } catch (DataAccessException | CannotCreateTransactionException e) {
+            log.error("Database connection failed while logging audit attempt for eventId={}. Msg: {}", eventId, e.getMessage());
+        }
     }
 
-    public TemplateId(String templateCode, String channel, String languageCode) {
-        this.templateCode = templateCode;
-        this.channel = channel;
-        this.languageCode = languageCode;
+    @Async("auditThreadPool")
+    public void logSuccess(String eventId) {
+        try {
+            int updatedRows = auditRepository.markAsSuccess(eventId);
+            if (updatedRows == 0) {
+                log.warn("Audit: Tried to mark eventId={} as SUCCESS, but record was missing.", eventId);
+            } else {
+                log.debug("Audit: Successfully marked eventId={} as SUCCESS", eventId);
+            }
+        } catch (DataAccessException e) {
+            log.error("Database failure while marking audit success for eventId={}", eventId, e);
+        }
     }
 
-    // Equals and HashCode are MANDATORY for composite keys
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        TemplateId that = (TemplateId) o;
-        return Objects.equals(templateCode, that.templateCode) &&
-                Objects.equals(channel, that.channel) &&
-                Objects.equals(languageCode, that.languageCode);
+    @Async("auditThreadPool")
+    public void logFailure(String eventId, String txId, String failureReason) {
+        try {
+            // 1. Attempt to update the existing row
+            int updatedRows = auditRepository.markAsFailed(eventId, truncateReason(failureReason));
+
+            // 2. Race Condition Protection:
+            // If the message crashed instantly (e.g., malformed JSON), the DLQ might run BEFORE
+            // the initial logAttempt finished. If so, we hard-insert the failure.
+            if (updatedRows == 0) {
+                CommAuditLog fallbackLog = CommAuditLog.builder()
+                        .eventId(eventId)
+                        .txId(txId != null ? txId : "UNKNOWN")
+                        .templateId("UNKNOWN_OR_CRASHED")
+                        .channels("UNKNOWN")
+                        .maskedRecipients("UNKNOWN")
+                        .status("FAILED")
+                        .failureReason(truncateReason(failureReason))
+                        .build();
+                auditRepository.save(fallbackLog);
+                log.warn("Audit: Handled race condition. Hard-inserted FAILED status for eventId={}", eventId);
+            } else {
+                log.debug("Audit: Marked eventId={} as FAILED in DB", eventId);
+            }
+        } catch (DataAccessException e) {
+            log.error("Database failure while writing DLQ audit for eventId={}", eventId, e);
+        }
     }
 
-    @Override
-    public int hashCode() {
-        return Objects.hash(templateCode, channel, languageCode);
+    private String maskRecipients(Recipients rec) {
+        if (rec == null) return "NO_RECIPIENT_DATA";
+
+        StringBuilder masked = new StringBuilder();
+        if (rec.getEmail() != null && rec.getEmail().contains("@")) {
+            String[] parts = rec.getEmail().split("@");
+            String maskedEmail = (parts[0].length() <= 2 ? "**" : parts[0].charAt(0) + "***" + parts[0].charAt(parts[0].length() - 1)) + "@" + parts[1];
+            masked.append("E:").append(maskedEmail).append(" ");
+        }
+        if (rec.getMobile() != null && rec.getMobile().length() >= 4) {
+            masked.append("M:******").append(rec.getMobile().substring(rec.getMobile().length() - 4));
+        }
+        return masked.toString().trim();
+    }
+
+    private String truncateReason(String reason) {
+        if (reason == null) return "Unknown Failure";
+        // Prevent DB clobbering if stack trace is massive
+        return reason.length() > 3900 ? reason.substring(0, 3900) + "..." : reason;
     }
 }
-
-
-
-package com.fincore.CommunicationService.model;
-
-import jakarta.persistence.*;
-import lombok.Data;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
-import java.time.LocalDateTime;
-
-@Data
-@Entity
-@Table(name = "COMM_TEMPLATE_MASTER")
-public class CommTemplateMaster {
-
-    @EmbeddedId
-    private TemplateId id;
-
-    @Column(name = "SUBJECT", length = 255)
-    private String subject;
-
-    @Lob
-    @Column(name = "BODY_CONTENT", nullable = false, columnDefinition = "CLOB")
-    private String bodyContent;
-
-    @Column(name = "IS_ACTIVE", length = 1, nullable = false)
-    private String isActive;
-
-    @Column(name = "CREATED_BY", length = 50, nullable = false)
-    private String createdBy;
-
-    @CreationTimestamp
-    @Column(name = "CREATED_AT", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
-
-    @Column(name = "UPDATED_BY", length = 50)
-    private String updatedBy;
-
-    @UpdateTimestamp
-    @Column(name = "UPDATED_AT")
-    private LocalDateTime updatedAt;
-
-}
-
-
-
