@@ -1,120 +1,125 @@
 package com.fincore.CommunicationService.service;
 
-import com.fincore.CommunicationService.config.AsyncConfig;
-import com.fincore.CommunicationService.dto.Recipients;
-import com.fincore.CommunicationService.model.CommAuditLog;
-import com.fincore.CommunicationService.repository.CommAuditLogRepository;
+import com.fincore.CommunicationService.exception.CommunicationExceptions.*;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import com.fincore.CommunicationService.cache.ExternalApiConfigProvider;
+import com.fincore.CommunicationService.client.EmailGatewayClient;
+import com.fincore.CommunicationService.dto.EmailResponse;
+import com.fincore.CommunicationService.model.FincoreSettings;
+import java.util.HashMap;
+import java.util.Map;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.dao.DataAccessException;
-import org.springframework.scheduling.annotation.Async;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.CannotCreateTransactionException;
-
-import java.util.List;
 
 /**
- * <p>A non-blocking auditing service responsible for storing various logging events
- * in the database.</p>
+ * <p>Handles the functionality for sending emails through a primary provider,
+ * incorporating a circuit breaker pattern to ensure system resilience.</p>
  *
- * <p>This service utilizes a dedicated thread pool defined in the {@link AsyncConfig}
- * class to ensure asynchronous processing without blocking the main application flow.</p>
+ * <p>This class is designed to support a fallback mechanism for future upgrades.
+ * Currently, failed messages are routed to a Dead Letter Queue (DLQ) as the fallback strategy.</p>
+ *
+ * <p>In the event of any errors during processing, a {@link VendorDeliveryException} is thrown.
+ * This exception is intended to be caught and handled by the OTP consumer.</p>
  *
  * @author SHUBHANKAR (v1018405)
+ * @contributor [Add contributor names/IDs here]
+ * @version 1.0
  * @since 2026-06-22
- * @see AsyncConfig
+ * @see VendorDeliveryException
  */
-@Slf4j
 @Service
 @RequiredArgsConstructor
-public class CommunicationAuditService {
+@Slf4j
+public class EmailServiceImpl implements EmailService {
 
-    private final CommAuditLogRepository auditRepository;
+	@Value("${app.preIpString:PR}")
+	private String environment;
 
-    @Async("auditThreadPool")
-    public void logAttempt(String eventId, String txId, String templateId, List<String> channels, Recipients recipients) {
-        try {
-            String maskedData = maskRecipients(recipients);
-            String channelsJoined = channels != null ? String.join(",", channels) : "UNKNOWN";
+	private final ExternalApiConfigProvider configProvider;
+	private final TemplateEngineService templateService; // L1 (Caffeine) Cache Service
+	private static final String FUNCTIONALITY_EMAIL = "EMAIL";
 
-            CommAuditLog logEntry = CommAuditLog.builder()
-                    .eventId(eventId)
-                    .txId(txId != null ? txId : "UNKNOWN")
-                    .templateId(templateId)
-                    .channels(channelsJoined)
-                    .maskedRecipients(maskedData)
-                    .status("PROCESSING")
-                    .build();
+	// Constants mapping to EmailGatewayClient
+	private static final String URL = "url";
+	private static final String API_KEY = "api_key";
+	private static final String SENDER_ID = "senderId";
+	private static final String TO_EMAIL = "toEmail";
+	private static final String EMAIL_BODY = "emailBody";
+	private static final String SUBJECT = "subject";
 
-            auditRepository.save(logEntry);
-            log.debug("Audit: Initial processing logged for eventId={}", eventId);
+	/**
+	 * Attempts to send via the single Bank API provider (only primary). Retries
+	 * automatically via Resilience4j.
+	 */
+	@Override
+	@Retry(name = "bankApiRetry", fallbackMethod = "handleTotalApiFailure")
+	@CircuitBreaker(name = "bankApiCircuit", fallbackMethod = "handleTotalApiFailure")
+	public EmailResponse sendEmail(String templateId, String toEmail, Map<String, Object> templateData) {
+		log.info("Reached send Email service file with template id : {}, templateData : {}", templateId, templateData);
 
-        } catch (DataAccessException | CannotCreateTransactionException e) {
-            log.error("Database connection failed while logging audit attempt for eventId={}. Msg: {}", eventId, e.getMessage());
+		// 1. Fetch Oracle L1 Cached Template & Compile FreeMarker
+		String emailBody = templateService.renderTemplate(templateId, "EMAIL", "EN", templateData);
+		String subject = templateService.getTemplateSubject(templateId, "EMAIL", "EN");
+
+		// 2. Fetch API Credentials from Fincore Settings
+		FincoreSettings config = configProvider.getConfig(FUNCTIONALITY_EMAIL, "UAT");
+
+		// 3. Prepare Payload for EmailUtil
+		Map<String, Object> emailRequestBody = new HashMap<>();
+		emailRequestBody.put(URL, config.getUrl());
+		emailRequestBody.put(API_KEY, config.getApiKey());
+		emailRequestBody.put(SENDER_ID, config.getSenderId());
+		emailRequestBody.put(TO_EMAIL, toEmail);
+		emailRequestBody.put(SUBJECT, subject);
+		emailRequestBody.put(EMAIL_BODY, emailBody);
+
+		log.info("Dispatching Email via Primary Provider to {}", maskEmail(toEmail));
+
+		int responseCode = EmailGatewayClient.sendEmail(emailRequestBody);
+        log.info("responseCode : {}", responseCode);
+
+		EmailResponse responseDto = new EmailResponse();
+		responseDto.setStatus(responseCode);
+		if (responseCode == 202) {
+			responseDto.setMessage("Email Sent Successfully");
+		} else if (responseCode < 200 || responseCode >= 300) {
+			responseDto.setMessage("Email Sending Failed");
+			throw new VendorDeliveryException("Email Provider rejected request. HTTP " + responseCode, null);
+		}
+		return responseDto;
+	}
+
+	/**
+	 * THE DLQ HOOK. Invoked automatically if all retries fail, or if the Circuit
+	 * Breaker is OPEN.
+	 */
+	public EmailResponse handleTotalApiFailure(String templateId, String toEmail, Map<String, Object> templateData,
+			Throwable ex) {
+		log.error("CRITICAL: Bank Email API is completely down or unreachable for {}. Error: {}", maskEmail(toEmail),
+				ex.getMessage());
+
+        if (ex instanceof TemplateNotFoundException) {
+            throw (TemplateNotFoundException) ex;
+        } else if (ex instanceof TemplateProcessingException) {
+            throw (TemplateProcessingException) ex;
         }
-    }
 
-    @Async("auditThreadPool")
-    public void logSuccess(String eventId) {
-        try {
-            int updatedRows = auditRepository.markAsSuccess(eventId);
-            if (updatedRows == 0) {
-                log.warn("Audit: Tried to mark eventId={} as SUCCESS, but record was missing.", eventId);
-            } else {
-                log.debug("Audit: Successfully marked eventId={} as SUCCESS", eventId);
-            }
-        } catch (DataAccessException e) {
-            log.error("Database failure while marking audit success for eventId={}", eventId, e);
-        }
-    }
+		throw new VendorDeliveryException("Total Bank API Infrastructure Failure", ex);
+	}
 
-    @Async("auditThreadPool")
-    public void logFailure(String eventId, String txId, String failureReason) {
-        try {
-            // 1. Attempt to update the existing row
-            int updatedRows = auditRepository.markAsFailed(eventId, truncateReason(failureReason));
-
-            // 2. Race Condition Protection:
-            // If the message crashed instantly (e.g., malformed JSON), the DLQ might run BEFORE
-            // the initial logAttempt finished. If so, we hard-insert the failure.
-            if (updatedRows == 0) {
-                CommAuditLog fallbackLog = CommAuditLog.builder()
-                        .eventId(eventId)
-                        .txId(txId != null ? txId : "UNKNOWN")
-                        .templateId("UNKNOWN_OR_CRASHED")
-                        .channels("UNKNOWN")
-                        .maskedRecipients("UNKNOWN")
-                        .status("FAILED")
-                        .failureReason(truncateReason(failureReason))
-                        .build();
-                auditRepository.save(fallbackLog);
-                log.warn("Audit: Handled race condition. Hard-inserted FAILED status for eventId={}", eventId);
-            } else {
-                log.debug("Audit: Marked eventId={} as FAILED in DB", eventId);
-            }
-        } catch (DataAccessException e) {
-            log.error("Database failure while writing DLQ audit for eventId={}", eventId, e);
-        }
-    }
-
-    private String maskRecipients(Recipients rec) {
-        if (rec == null) return "NO_RECIPIENT_DATA";
-
-        StringBuilder masked = new StringBuilder();
-        if (rec.getEmail() != null && rec.getEmail().contains("@")) {
-            String[] parts = rec.getEmail().split("@");
-            String maskedEmail = (parts[0].length() <= 2 ? "**" : parts[0].charAt(0) + "***" + parts[0].charAt(parts[0].length() - 1)) + "@" + parts[1];
-            masked.append("E:").append(maskedEmail).append(" ");
-        }
-        if (rec.getMobile() != null && rec.getMobile().length() >= 4) {
-            masked.append("M:******").append(rec.getMobile().substring(rec.getMobile().length() - 4));
-        }
-        return masked.toString().trim();
-    }
-
-    private String truncateReason(String reason) {
-        if (reason == null) return "Unknown Failure";
-        // Prevent DB clobbering if stack trace is massive
-        return reason.length() > 3900 ? reason.substring(0, 3900) + "..." : reason;
-    }
+    /**
+     * Mask the email to satisfy PII Data masking.
+     * @param email Recipients email
+     * @return Masked email
+     */
+	private String maskEmail(String email) {
+		if (email == null || !email.contains("@"))
+			return email;
+		String[] p = email.split("@");
+		return (p[0].length() <= 2 ? "**" : p[0].charAt(0) + "***" + p[0].charAt(p[0].length() - 1)) + "@" + p[1];
+	}
 }
