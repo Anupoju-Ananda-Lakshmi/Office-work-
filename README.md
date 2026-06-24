@@ -1,125 +1,105 @@
 package com.fincore.CommunicationService.service;
 
-import com.fincore.CommunicationService.exception.CommunicationExceptions.*;
-import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
-import io.github.resilience4j.retry.annotation.Retry;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
-import com.fincore.CommunicationService.cache.ExternalApiConfigProvider;
-import com.fincore.CommunicationService.client.EmailGatewayClient;
-import com.fincore.CommunicationService.dto.EmailResponse;
-import com.fincore.CommunicationService.model.FincoreSettings;
-import java.util.HashMap;
-import java.util.Map;
-
+import com.fincore.CommunicationService.exception.CommunicationExceptions;
+import com.fincore.CommunicationService.model.CommTemplateMaster;
+import com.fincore.CommunicationService.model.TemplateId;
+import com.fincore.CommunicationService.repository.TemplateRepository;
+import freemarker.template.Configuration;
+import freemarker.template.Template;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.stereotype.Service;
+
+import java.io.IOException;
+import java.io.StringReader;
 
 /**
- * <p>Handles the functionality for sending emails through a primary provider,
- * incorporating a circuit breaker pattern to ensure system resilience.</p>
+ * <p>Handles retrieval and caching of compiled FreeMarker templates.</p>
  *
- * <p>This class is designed to support a fallback mechanism for future upgrades.
- * Currently, failed messages are routed to a Dead Letter Queue (DLQ) as the fallback strategy.</p>
- *
- * <p>In the event of any errors during processing, a {@link VendorDeliveryException} is thrown.
- * This exception is intended to be caught and handled by the OTP consumer.</p>
+ * <p>This service isolates caching logic from business logic, ensuring clean separation
+ * of concerns and proper Spring AOP proxy interception without self-invocation hacks.</p>
  *
  * @author SHUBHANKAR (v1018405)
- * @contributor [Add contributor names/IDs here]
- * @version 1.0
  * @since 2026-06-22
- * @see VendorDeliveryException
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
-@Slf4j
-public class EmailServiceImpl implements EmailService {
+public class TemplateCacheService {
 
-	@Value("${app.preIpString:PR}")
-	private String environment;
-
-	private final ExternalApiConfigProvider configProvider;
-	private final TemplateEngineService templateService; // L1 (Caffeine) Cache Service
-	private static final String FUNCTIONALITY_EMAIL = "EMAIL";
-
-	// Constants mapping to EmailGatewayClient
-	private static final String URL = "url";
-	private static final String API_KEY = "api_key";
-	private static final String SENDER_ID = "senderId";
-	private static final String TO_EMAIL = "toEmail";
-	private static final String EMAIL_BODY = "emailBody";
-	private static final String SUBJECT = "subject";
-
-	/**
-	 * Attempts to send via the single Bank API provider (only primary). Retries
-	 * automatically via Resilience4j.
-	 */
-	@Override
-	@Retry(name = "bankApiRetry", fallbackMethod = "handleTotalApiFailure")
-	@CircuitBreaker(name = "bankApiCircuit", fallbackMethod = "handleTotalApiFailure")
-	public EmailResponse sendEmail(String templateId, String toEmail, Map<String, Object> templateData) {
-		log.info("Reached send Email service file with template id : {}, templateData : {}", templateId, templateData);
-
-		// 1. Fetch Oracle L1 Cached Template & Compile FreeMarker
-		String emailBody = templateService.renderTemplate(templateId, "EMAIL", "EN", templateData);
-		String subject = templateService.getTemplateSubject(templateId, "EMAIL", "EN");
-
-		// 2. Fetch API Credentials from Fincore Settings
-		FincoreSettings config = configProvider.getConfig(FUNCTIONALITY_EMAIL, "UAT");
-
-		// 3. Prepare Payload for EmailUtil
-		Map<String, Object> emailRequestBody = new HashMap<>();
-		emailRequestBody.put(URL, config.getUrl());
-		emailRequestBody.put(API_KEY, config.getApiKey());
-		emailRequestBody.put(SENDER_ID, config.getSenderId());
-		emailRequestBody.put(TO_EMAIL, toEmail);
-		emailRequestBody.put(SUBJECT, subject);
-		emailRequestBody.put(EMAIL_BODY, emailBody);
-
-		log.info("Dispatching Email via Primary Provider to {}", maskEmail(toEmail));
-
-		int responseCode = EmailGatewayClient.sendEmail(emailRequestBody);
-        log.info("responseCode : {}", responseCode);
-
-		EmailResponse responseDto = new EmailResponse();
-		responseDto.setStatus(responseCode);
-		if (responseCode == 202) {
-			responseDto.setMessage("Email Sent Successfully");
-		} else if (responseCode < 200 || responseCode >= 300) {
-			responseDto.setMessage("Email Sending Failed");
-			throw new VendorDeliveryException("Email Provider rejected request. HTTP " + responseCode, null);
-		}
-		return responseDto;
-	}
-
-	/**
-	 * THE DLQ HOOK. Invoked automatically if all retries fail, or if the Circuit
-	 * Breaker is OPEN.
-	 */
-	public EmailResponse handleTotalApiFailure(String templateId, String toEmail, Map<String, Object> templateData,
-			Throwable ex) {
-		log.error("CRITICAL: Bank Email API is completely down or unreachable for {}. Error: {}", maskEmail(toEmail),
-				ex.getMessage());
-
-        if (ex instanceof TemplateNotFoundException) {
-            throw (TemplateNotFoundException) ex;
-        } else if (ex instanceof TemplateProcessingException) {
-            throw (TemplateProcessingException) ex;
-        }
-
-		throw new VendorDeliveryException("Total Bank API Infrastructure Failure", ex);
-	}
+    private final TemplateRepository templateRepository;
+    private final Configuration freeMarkerConfig;
 
     /**
-     * Mask the email to satisfy PII Data masking.
-     * @param email Recipients email
-     * @return Masked email
+     * <p>Fetches the template CLOB from Oracle and compiles it into a FreeMarker {@link Template} object.</p>
+     *
+     * <p><strong>Caching Strategy:</strong></p>
+     * <ul>
+     *   <li><strong>Key:</strong> Composite ({@code code:channel:language}).</li>
+     *   <li><strong>TTL:</strong> 12 hours (configured externally).</li>
+     *   <li><strong>Condition:</strong> Caches only if result is not {@code null}.</li>
+     * </ul>
+     *
+     * @param templateCode The unique template identifier.
+     * @param channel      The communication channel.
+     * @param language     The locale language code.
+     * @return The compiled FreeMarker {@link Template} object.
+     * @throws CommunicationExceptions.TemplateNotFoundException   if the template is not found or inactive.
+     * @throws CommunicationExceptions.TemplateProcessingException if compilation fails.
      */
-	private String maskEmail(String email) {
-		if (email == null || !email.contains("@"))
-			return email;
-		String[] p = email.split("@");
-		return (p[0].length() <= 2 ? "**" : p[0].charAt(0) + "***" + p[0].charAt(p[0].length() - 1)) + "@" + p[1];
-	}
+    @Cacheable(value = "templates", key = "#templateCode + ':' + #channel + ':' + #language", unless = "#result == null")
+    public Template getCompiledTemplate(String templateCode, String channel, String language) {
+        log.info("L1 CACHE MISS: Fetching and Compiling Template {} for {} from Oracle DB.", templateCode, channel);
+
+        // 1. Database Lookup
+        CommTemplateMaster tmpl = templateRepository.findById(new TemplateId(templateCode, channel, language))
+                .orElseThrow(() -> new CommunicationExceptions.TemplateNotFoundException("Template not found in Oracle: " + templateCode));
+
+        if (!"Y".equalsIgnoreCase(tmpl.getIsActive().trim())) {
+            throw new CommunicationExceptions.TemplateNotFoundException("Template is disabled: " + templateCode);
+        }
+
+        String rawClobContent = tmpl.getBodyContent();
+
+        // 2. Compile into Abstract Syntax Tree (AST)
+        try {
+            return new Template(templateCode, new StringReader(rawClobContent), freeMarkerConfig);
+        } catch (IOException e) {
+            log.error("Syntax error in FreeMarker template {}.", templateCode, e);
+            throw new CommunicationExceptions.TemplateProcessingException("Syntax error compiling template: " + templateCode, e);
+        }
+    }
+
+    /**
+     * <p>Retrieves the cached subject line for a specific template.</p>
+     *
+     * @param templateCode The unique template identifier.
+     * @param channel      The communication channel.
+     * @param language     The locale language code.
+     * @return The subject line string.
+     * @throws CommunicationExceptions.TemplateNotFoundException if the template does not exist.
+     */
+    @Cacheable(value = "template_subjects", key = "#templateCode + ':' + #channel + ':' + #language")
+    public String getTemplateSubject(String templateCode, String channel, String language) {
+        CommTemplateMaster tmpl = templateRepository.findById(new TemplateId(templateCode, channel, language))
+                .orElseThrow(() -> new CommunicationExceptions.TemplateNotFoundException("Template not found in Oracle: " + templateCode));
+
+        if (!"Y".equalsIgnoreCase(tmpl.getIsActive().trim())) {
+            throw new CommunicationExceptions.TemplateNotFoundException("Template is disabled: " + templateCode);
+        }
+
+        return tmpl.getSubject();
+    }
+
+    /**
+     * <p>Evicts all entries from the template caches.</p>
+     *
+     * @see TemplateEngineService#flushTemplateCache()
+     */
+    @CacheEvict(value = {"templates", "template_subjects"}, allEntries = true)
+    public void flushCache() {
+        log.warn("ADMIN ACTION: All communication templates evicted from L1/L2 Cache.");
+    }
 }
