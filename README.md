@@ -1,99 +1,55 @@
 package com.fincore.CommunicationService.config;
 
-import com.fincore.commonutilities.config.CommonSecurityConfig;
-import com.fincore.commonutilities.config.RedisConfig;
-import com.fincore.commonutilities.config.ResilienceConfig;
-import com.fincore.commonutilities.jwt.JwtUtil;
-import com.fincore.commonutilities.logging.MdcLoggingFilter;
-import com.fincore.commonutilities.security.ContextRbacFilter;
-import com.fincore.commonutilities.security.DecryptRequestBodyAdvice;
-import com.fincore.commonutilities.util.AesEncryptionUtil;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.common.serialization.StringDeserializer;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Import;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
-import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.kafka.annotation.EnableKafka;
+import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
+import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
+import org.springframework.kafka.listener.ContainerProperties;
 
-/**
- * Common Security Configuration.
- * * Aligned with the "Distributed Gateway" architecture.
- * It uses the ContextRbacFilter from Common Utilities to enforce:
- * 1. Token Validity
- * 2. Single Session (Redis check)
- * 3. RBAC Permissions
- * Enforces Centralised Mdc Logging Filter, RESILIENCE4J Retry and Circuit Breaker
- */
+import java.util.HashMap;
+import java.util.Map;
+
+@EnableKafka
 @Configuration
-@EnableWebSecurity
-@Import({
-        RedisConfig.class,
-        JwtUtil.class,
-        CommonSecurityConfig.class,
-        ResilienceConfig.class,
-        AesEncryptionUtil.class,
-        DecryptRequestBodyAdvice.class
-})
-public class SecurityConfig {
+public class KafkaConsumerConfig {
 
-    @Autowired
-    private StringRedisTemplate redisTemplate;
-
-    @Autowired
-    private JwtUtil jwtUtil;
-
-    @Autowired
-    private CommonSecurityConfig commonSecurityConfig;
-
-    // --- 1. Define Filters as Beans (Explicitly) ---
+    @Value("${spring.kafka.bootstrap-servers}")
+    private String bootstrapServers;
 
     @Bean
-    public MdcLoggingFilter mdcLoggingFilter() {
-        return new MdcLoggingFilter(jwtUtil);
+    public DefaultKafkaConsumerFactory<String, String> stringConsumerFactory() {
+        Map<String, Object> props = new HashMap<>();
+        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        // Force reading from the beginning
+        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+
+        // ABSOLUTE MANDATE: Ignore properties files and custom libraries. Force String.
+        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+
+        return new DefaultKafkaConsumerFactory<>(props);
     }
 
-    @Bean
-    public ContextRbacFilter contextRbacFilter() {
-        return new ContextRbacFilter(redisTemplate, jwtUtil);
-    }
+    /**
+     * THE BULKHEAD: Dedicated Thread Pool for Tier-0 OTPs.
+     * Prevents End-of-Day PDF emails from starving the OTP pipeline.
+     */
+    @Bean("priorityOtpContainerFactory")
+    public ConcurrentKafkaListenerContainerFactory<String, String> priorityOtpContainerFactory() {
 
-    // --- 2. Prevent Global Registration ---
-    // This stops "The Filter class ... does not have a registered order" error
+        ConcurrentKafkaListenerContainerFactory<String, String> factory = new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(stringConsumerFactory());
+        // Match this concurrency to the number of partitions on 'fincore.auth.otp.priority' (e.g., 10-20)
+        factory.setConcurrency(10);
+        // Strict Manual Acknowledgment. We only ACK when the SMS/Email is securely handed to the Vendor.
+        factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
+        // We set the poll interval high enough to outlast the Resilience4j max timeout.
+        factory.getContainerProperties().setPollTimeout(3000);
 
-    @Bean
-    public FilterRegistrationBean<MdcLoggingFilter> mdcFilterRegistration(MdcLoggingFilter filter) {
-        FilterRegistrationBean<MdcLoggingFilter> registration = new FilterRegistrationBean<>(filter);
-        registration.setEnabled(false); // Disable global chain
-        return registration;
-    }
-
-    @Bean
-    public FilterRegistrationBean<ContextRbacFilter> rbacFilterRegistration(ContextRbacFilter filter) {
-        FilterRegistrationBean<ContextRbacFilter> registration = new FilterRegistrationBean<>(filter);
-        registration.setEnabled(false); // Disable global chain
-        return registration;
-    }
-
-    @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        http
-                .csrf(AbstractHttpConfigurer::disable)
-                .cors(cors -> cors.configurationSource(commonSecurityConfig.corsConfigurationSource()))
-                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(authz -> authz
-                        .requestMatchers("/actuator/**", "/api/auth/**", "/error", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
-                        .anyRequest().authenticated()
-                )
-                // Add Filters using the BEAN references (methods above)
-                .addFilterBefore(mdcLoggingFilter(), UsernamePasswordAuthenticationFilter.class)
-                .addFilterAfter(contextRbacFilter(), MdcLoggingFilter.class);
-
-        return http.build();
+        return factory;
     }
 }
