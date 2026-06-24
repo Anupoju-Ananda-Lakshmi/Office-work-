@@ -1,31 +1,39 @@
 package com.fincore.CommunicationService.config;
 
+import com.github.benmanes.caffeine.cache.Caffeine;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.cache.caffeine.CaffeineCacheManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.scheduling.annotation.EnableAsync;
-import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
-import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
 
 /**
- * Asynchronous Configuration.
- * Creates dedicated threads for non-blocking I/O operations (like Database Auditing).
+ * Caching Configuration for Communication Service.
+ * Implements a High-Speed L1 (In-Memory) Cache using Caffeine.
  */
+@EnableCaching
 @Configuration
-@EnableAsync
-public class AsyncConfig {
+public class CacheConfig {
 
-    @Bean(name = "auditThreadPool")
-    public Executor auditThreadPool() {
-        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(5);
-        executor.setMaxPoolSize(20);
-        // Allows up to 1000 audit events to queue up during extreme traffic bursts
-        executor.setQueueCapacity(1000);
-        executor.setThreadNamePrefix("Audit-Async-");
-        // Rejects tasks if queue is full instead of crashing JVM memory
-        executor.setRejectedExecutionHandler(new java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy());
-        executor.initialize();
-        return executor;
+    @Bean
+    public CacheManager cacheManager() {
+        // Defining the cache names we will use for templates and subjects
+        CaffeineCacheManager cacheManager = new CaffeineCacheManager(
+                "templates",
+                "template_subjects",
+                "externalApiConfigs"
+        );
+
+        cacheManager.setCaffeine(Caffeine.newBuilder()
+                // Evict entries 12 hours after they were written to the cache
+                .expireAfterWrite(12, TimeUnit.HOURS)
+                // Prevent memory leaks by capping the maximum number of cached templates
+                .maximumSize(1000)
+                // Record stats for APM (e.g., Datadog/Prometheus) tracking cache hit ratios
+                .recordStats());
+
+        return cacheManager;
     }
 }
