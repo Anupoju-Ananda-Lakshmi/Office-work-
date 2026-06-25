@@ -1,20 +1,9 @@
-spring.application.name=CommunicationService
-spring.datasource.driver-class-name=oracle.jdbc.OracleDriver
-spring.profiles.active=dev
-server.port=8001
-
+   
 # ===================================================================
-# DEFAULT ENVIRONMENT NAME FOR FALLBACK
+#                          CIRCUIT BREAKER
 # ===================================================================
-app.preIpString=DEV
-
-
-#====================================================================
-#                          RESILIENCE
-#====================================================================
-resilience4j.retry.instances.bankApiRetry.max-attempts=3
-resilience4j.retry.instances.bankApiRetry.wait-duration=2s
-resilience4j.retry.instances.bankApiRetry.retry-exceptions[0]=java.io.IOException
-resilience4j.retry.instances.bankApiRetry.retry-exceptions[1]=java.net.SocketTimeoutException
-resilience4j.retry.instances.bankApiRetry.ignore-exceptions[0]=com.fincore.CommunicationService.exception.CommunicationExceptions.TemplateNotFoundException
-resilience4j.retry.instances.bankApiRetry.ignore-exceptions[1]=com.fincore.CommunicationService.exception.CommunicationExceptions.TemplateProcessingException   
+resilience4j.circuitbreaker.instances.bankApiCircuit.failure-rate-threshold=50
+resilience4j.circuitbreaker.instances.bankApiCircuit.minimum-number-of-calls=5
+resilience4j.circuitbreaker.instances.bankApiCircuit.sliding-window-size=10
+resilience4j.circuitbreaker.instances.bankApiCircuit.wait-duration-in-open-state=30s
+resilience4j.circuitbreaker.instances.bankApiCircuit.permitted-number-of-calls-in-half-open-state=3
