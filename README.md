@@ -1,46 +1,85 @@
-package com.fincore.process_status_service.producer;
+package com.fincore.process_status_service.consumer;
 
-import java.util.Set;
-import java.util.stream.Collectors;
+import com.fincore.process_status_service.dto.AirflowDagEvent;
+import com.fincore.process_status_service.dto.AttachmentRef;
+import com.fincore.process_status_service.dto.CommunicationEvent;
+import com.fincore.process_status_service.dto.Recipients;
+import com.fincore.process_status_service.repository.RolePermissionsRepository;
+import com.fincore.process_status_service.service.ProcessStatusService;
 
-
-import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.stereotype.Service;
-
-import com.fincore.process_status_service.dto.SingleReportTriggerDTO;
-
-import jakarta.validation.ConstraintViolation;
-import jakarta.validation.Validator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-@Service
+import java.util.ArrayList;
+import java.util.List;
+
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.stereotype.Component;
+
+@Component
 @RequiredArgsConstructor
 @Slf4j
-public class SingleReportProducer {
+public class AirflowEventConsumer {
 
-    private final KafkaTemplate<String, Object> kafkaTemplate;
-    private final Validator validator;
+	private final ProcessStatusService processStatusService;
 
-    private static final String TOPIC = "report-builder.single-mode.trigger";
+	private final RolePermissionsRepository repository;
 
-    public void triggerReport(SingleReportTriggerDTO dto) {
+	private static final String PRODUCER_SERVICE = "PROCESS_STATUS";
+	private static final String EVENT_TYPE = "EOD_EVENT";
+	private static final String PRIORITY = "NORMAL";
+	private static final String TEMPLATE_ID = "SUCCESS_EOD_TEMPLATE";
+	private static final List<String> CHANNELS = List.of("SMS", "EMAIL");
+	private static final String BAL_COMP_ATTACHEMENT_TYPE = "BAL_COMP_SUMMARY";
+	private static final String CIBA_ATTACHEMENT_TYPE = "CIBA_SUMMARY";
+	private static final String SUSPENSE_ATTACHEMENT_TYPE = "SUSPENSE_SUMMARY";
+	private static final String BAL_COMP_FILE_NAME = "BalCompareReport";
+	private static final String CIBA_FILE_NAME = "CIBAReport";
+	private static final String SUSPENSE_FILE_NAME = "SuspenseReport";
 
-        Set<ConstraintViolation<SingleReportTriggerDTO>> violations = validator.validate(dto);
+	@KafkaListener(topics = "airflow-events", groupId = "Airflow_ETL", properties = {
+			"spring.json.value.default.type=com.fincore.process_status_service.dto.AirflowDagEvent" })
+	public void consume(AirflowDagEvent dagEvent) {
 
-        if (!violations.isEmpty()) {
+		log.info("Received Airflow event: {}", dagEvent);
 
-            String error = violations.stream()
-                    .map(ConstraintViolation::getMessage)
-                    .collect(Collectors.joining(", "));
+		List<String> userRoles = repository.fetchRoles();
 
-            log.error("Validation Failed for trigger event: {}", error);
-            return;
-        }
+		Recipients recipients = new Recipients();
+		recipients.setRoles(userRoles);
 
-        log.info("Producing single mode trigger event: {}", dto);
+		AttachmentRef bcAttachmentRef = new AttachmentRef();
+		bcAttachmentRef.setAttachmentType(BAL_COMP_ATTACHEMENT_TYPE);
+		bcAttachmentRef.setFileName(BAL_COMP_FILE_NAME);
 
-        kafkaTemplate.send(TOPIC, dto);
-    }
+		AttachmentRef cibaAttachmentRef = new AttachmentRef();
+		cibaAttachmentRef.setAttachmentType(CIBA_ATTACHEMENT_TYPE);
+		cibaAttachmentRef.setFileName(CIBA_FILE_NAME);
 
+		AttachmentRef suspAttachmentRef = new AttachmentRef();
+		suspAttachmentRef.setAttachmentType(SUSPENSE_ATTACHEMENT_TYPE);
+		suspAttachmentRef.setFileName(SUSPENSE_FILE_NAME);
+
+		List<AttachmentRef> list = new ArrayList<>();
+		list.add(bcAttachmentRef);
+		list.add(cibaAttachmentRef);
+		list.add(suspAttachmentRef);
+
+		CommunicationEvent commEvent = new CommunicationEvent();
+
+		commEvent.setProducerService(PRODUCER_SERVICE);
+		commEvent.setEventType(EVENT_TYPE);
+		commEvent.setPriority(PRIORITY);
+		commEvent.setChannels(CHANNELS);
+		commEvent.setRecipients(recipients);
+		commEvent.setTemplateId(TEMPLATE_ID);
+
+		// commEvent.setPayload(null);
+
+		commEvent.setAttachments(list);
+
+		// commEvent.setDeepLinks(null);
+		// commEvent.setMetaData(null);
+		processStatusService.sendProcessStatusUpdates();
+	}
 }
