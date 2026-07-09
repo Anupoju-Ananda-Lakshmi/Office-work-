@@ -1,32 +1,33 @@
-package com.fincore.process_status_service.consumer;
+@Override
+public void handleAirflowEvent(AirflowDagEvent dagEvent) {
 
-import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.stereotype.Component;
+    List<String> userRoles = repository.fetchRoles();
 
-import com.fincore.process_status_service.dto.AirflowDagEvent;
-import com.fincore.process_status_service.service.ProcessStatusService;
+    Recipients recipients = new Recipients();
+    recipients.setRoles(userRoles);
 
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+    List<AttachmentRef> attachments = List.of(
+            createAttachment(BAL_COMP_ATTACHMENT_TYPE, BAL_COMP_FILE_NAME),
+            createAttachment(CIBA_ATTACHMENT_TYPE, CIBA_FILE_NAME),
+            createAttachment(SUSPENSE_ATTACHMENT_TYPE, SUSPENSE_FILE_NAME)
+    );
 
-@Component
-@RequiredArgsConstructor
-@Slf4j
-public class AirflowEventConsumer {
+    CommunicationEvent commEvent = new CommunicationEvent();
 
-    private final ProcessStatusService processStatusService;
+    commEvent.setProducerService(PRODUCER_SERVICE);
+    commEvent.setEventType(EVENT_TYPE);
+    commEvent.setPriority(PRIORITY);
+    commEvent.setChannels(CHANNELS);
+    commEvent.setRecipients(recipients);
+    commEvent.setTemplateId(TEMPLATE_ID);
+    commEvent.setAttachments(attachments);
 
-    @KafkaListener(
-            topics = "airflow-events",
-            groupId = "Airflow_ETL",
-            properties = {
-                "spring.json.value.default.type=com.fincore.process_status_service.dto.AirflowDagEvent"
-            }
-    )
-    public void consume(AirflowDagEvent dagEvent) {
+    // Build payload from Airflow event when ready
+    // commEvent.setPayload(...);
 
-        log.info("Received Airflow event : {}", dagEvent);
+    // Publish event
+    communicationProducer.publish(commEvent);
 
-        processStatusService.handleAirflowEvent(dagEvent);
-    }
+    // Notify dashboard
+    sendProcessStatusUpdates();
 }
