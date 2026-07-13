@@ -1,4 +1,4 @@
-  @Override
+@Override
     public void handleAirflowEvent(AirflowDagEvent dagEvent) {
 
         List<String> userRoles = rolePermissionsRepository.fetchRoles();
@@ -26,7 +26,8 @@
         List<String> intrHeaders = new ArrayList<>();
         List<String> cntrHeaders = new ArrayList<>();
         
-        summaryList.forEach(list -> {
+        for(ProcessStatusProjection list : summaryList) {
+        	try {
         	if(list.getStageId().equalsIgnoreCase("difference_summary")) {
         		balCompSummaryMap = objMap.readValue(list.getSummary(), new TypeReference<Map<String,String>>() {
 				});
@@ -40,7 +41,10 @@
 				});
         		cntrHeaders.addAll(cntrSummaryMap.keySet());
         	}
-        });
+        } catch(JsonProcessingException e ) {
+        	throw new RuntimeException("Error parsing summary Json",e);
+        }
+        	} 
        
         
         //payload.put("userName",);
@@ -71,6 +75,7 @@
         commEvent.setRecipients(recipients);
         commEvent.setTemplateId(Constants.TEMPLATE_ID);
         commEvent.setAttachments(attachments);
+        commEvent.setPayload(payload);
         
         // commEvent.setDeepLinks(null);
         // commEvent.setMetaData(null);
