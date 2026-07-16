@@ -108,6 +108,16 @@ This generated password is for development use only. Your security configuration
 {"@timestamp":"2026-07-16T12:53:40.2012143+05:30","level":"INFO","service":"ProcessStatusService","traceId":"","userId":"","clientIp":"","apiPath":"","requestUrl":"","httpMethod":"","httpStatus":"","class":"o.s.s.web.DefaultSecurityFilterChain","message":"Will secure any request with [org.springframework.security.web.session.DisableEncodeUrlFilter@7d4069b0, org.springframework.security.web.context.request.async.WebAsyncManagerIntegrationFilter@73f9fc72, org.springframework.security.web.context.SecurityContextHolderFilter@7c11f00a, org.springframework.security.web.header.HeaderWriterFilter@1919382c, org.springframework.web.filter.CorsFilter@6a15ec76, org.springframework.security.web.authentication.logout.LogoutFilter@1abd158, com.fincore.commonutilities.logging.MdcLoggingFilter@180fb796, com.fincore.commonutilities.security.ContextRbacFilter@5400db7e, org.springframework.security.web.savedrequest.RequestCacheAwareFilter@54c5c875, org.springframework.security.web.servletapi.SecurityContextHolderAwareRequestFilter@107b30e0, org.springframework.security.web.authentication.AnonymousAuthenticationFilter@6e38260f, org.springframework.security.web.session.SessionManagementFilter@7d061471, org.springframework.security.web.access.ExceptionTranslationFilter@6a4b4d5, org.springframework.security.web.access.intercept.AuthorizationFilter@474f8a2b]","stack_trace":""}
 2026-07-16 12:53:40.246 [34mINFO [0;39m [[34mmain[0;39m] [33mc.f.p.c.WebClientConfig[0;39m: Configuring Airflow WebClient with Base URL: http://airflow-api-server.cbops.svc.cluster.local:8080/airflow 
 {"@timestamp":"2026-07-16T12:53:40.2460041+05:30","level":"INFO","service":"ProcessStatusService","traceId":"","userId":"","clientIp":"","apiPath":"","requestUrl":"","httpMethod":"","httpStatus":"","class":"c.f.p.config.WebClientConfig","message":"Configuring Airflow WebClient with Base URL: http://airflow-api-server.cbops.svc.cluster.local:8080/airflow","stack_trace":""}
+
+
+
+
+
+
+
+
+
+
 2026-07-16 12:53:41.383 [34mINFO [0;39m [[34mmain[0;39m] [33mo.a.k.c.c.AbstractConfig[0;39m: AdminClientConfig values: 
 	auto.include.jmx.reporter = true
 	bootstrap.controllers = []
@@ -181,6 +191,13 @@ This generated password is for development use only. Your security configuration
 	ssl.truststore.location = null
 	ssl.truststore.password = null
 	ssl.truststore.type = JKS
+
+
+
+
+
+
+	
  
 {"@timestamp":"2026-07-16T12:53:41.3836902+05:30","level":"INFO","service":"ProcessStatusService","traceId":"","userId":"","clientIp":"","apiPath":"","requestUrl":"","httpMethod":"","httpStatus":"","class":"o.a.k.clients.admin.AdminClientConfig","message":"AdminClientConfig values: \r\n\tauto.include.jmx.reporter = true\r\n\tbootstrap.controllers = []\r\n\tbootstrap.servers = [localhost:9092]\r\n\tclient.dns.lookup = use_all_dns_ips\r\n\tclient.id = ProcessStatusService-admin-0\r\n\tconnections.max.idle.ms = 300000\r\n\tdefault.api.timeout.ms = 60000\r\n\tenable.metrics.push = true\r\n\tmetadata.max.age.ms = 300000\r\n\tmetric.reporters = []\r\n\tmetrics.num.samples = 2\r\n\tmetrics.recording.level = INFO\r\n\tmetrics.sample.window.ms = 30000\r\n\treceive.buffer.bytes = 65536\r\n\treconnect.backoff.max.ms = 1000\r\n\treconnect.backoff.ms = 50\r\n\trequest.timeout.ms = 30000\r\n\tretries = 2147483647\r\n\tretry.backoff.max.ms = 1000\r\n\tretry.backoff.ms = 100\r\n\tsasl.client.callback.handler.class = null\r\n\tsasl.jaas.config = null\r\n\tsasl.kerberos.kinit.cmd = /usr/bin/kinit\r\n\tsasl.kerberos.min.time.before.relogin = 60000\r\n\tsasl.kerberos.service.name = null\r\n\tsasl.kerberos.ticket.renew.jitter = 0.05\r\n\tsasl.kerberos.ticket.renew.window.factor = 0.8\r\n\tsasl.login.callback.handler.class = null\r\n\tsasl.login.class = null\r\n\tsasl.login.connect.timeout.ms = null\r\n\tsasl.login.read.timeout.ms = null\r\n\tsasl.login.refresh.buffer.seconds = 300\r\n\tsasl.login.refresh.min.period.seconds = 60\r\n\tsasl.login.refresh.window.factor = 0.8\r\n\tsasl.login.refresh.window.jitter = 0.05\r\n\tsasl.login.retry.backoff.max.ms = 10000\r\n\tsasl.login.retry.backoff.ms = 100\r\n\tsasl.mechanism = GSSAPI\r\n\tsasl.oauthbearer.clock.skew.seconds = 30\r\n\tsasl.oauthbearer.expected.audience = null\r\n\tsasl.oauthbearer.expected.issuer = null\r\n\tsasl.oauthbearer.jwks.endpoint.refresh.ms = 3600000\r\n\tsasl.oauthbearer.jwks.endpoint.retry.backoff.max.ms = 10000\r\n\tsasl.oauthbearer.jwks.endpoint.retry.backoff.ms = 100\r\n\tsasl.oauthbearer.jwks.endpoint.url = null\r\n\tsasl.oauthbearer.scope.claim.name = scope\r\n\tsasl.oauthbearer.sub.claim.name = sub\r\n\tsasl.oauthbearer.token.endpoint.url = null\r\n\tsecurity.protocol = PLAINTEXT\r\n\tsecurity.providers = null\r\n\tsend.buffer.bytes = 131072\r\n\tsocket.connection.setup.timeout.max.ms = 30000\r\n\tsocket.connection.setup.timeout.ms = 10000\r\n\tssl.cipher.suites = null\r\n\tssl.enabled.protocols = [TLSv1.2, TLSv1.3]\r\n\tssl.endpoint.identification.algorithm = https\r\n\tssl.engine.factory.class = null\r\n\tssl.key.password = null\r\n\tssl.keymanager.algorithm = SunX509\r\n\tssl.keystore.certificate.chain = null\r\n\tssl.keystore.key = null\r\n\tssl.keystore.location = null\r\n\tssl.keystore.password = null\r\n\tssl.keystore.type = JKS\r\n\tssl.protocol = TLSv1.3\r\n\tssl.provider = null\r\n\tssl.secure.random.implementation = null\r\n\tssl.trustmanager.algorithm = PKIX\r\n\tssl.truststore.certificates = null\r\n\tssl.truststore.location = null\r\n\tssl.truststore.password = null\r\n\tssl.truststore.type = JKS\r\n","stack_trace":""}
 2026-07-16 12:53:41.476 [34mINFO [0;39m [[34mmain[0;39m] [33mo.a.k.c.u.AppInfoParser$AppInfo[0;39m: Kafka version: 3.7.0 
@@ -201,6 +218,11 @@ This generated password is for development use only. Your security configuration
 {"@timestamp":"2026-07-16T12:53:41.9072064+05:30","level":"INFO","service":"ProcessStatusService","traceId":"","userId":"","clientIp":"","apiPath":"","requestUrl":"","httpMethod":"","httpStatus":"","class":"o.apache.coyote.http11.Http11NioProtocol","message":"Starting ProtocolHandler [\"http-nio-9006\"]","stack_trace":""}
 2026-07-16 12:53:41.935 [34mINFO [0;39m [[34mmain[0;39m] [33mo.s.b.w.e.t.TomcatWebServer[0;39m: Tomcat started on port 9006 (http) with context path '/' 
 {"@timestamp":"2026-07-16T12:53:41.9350989+05:30","level":"INFO","service":"ProcessStatusService","traceId":"","userId":"","clientIp":"","apiPath":"","requestUrl":"","httpMethod":"","httpStatus":"","class":"o.s.b.w.embedded.tomcat.TomcatWebServer","message":"Tomcat started on port 9006 (http) with context path '/'","stack_trace":""}
+
+
+
+
+
 2026-07-16 12:53:41.962 [34mINFO [0;39m [[34mmain[0;39m] [33mo.a.k.c.c.AbstractConfig[0;39m: ConsumerConfig values: 
 	allow.auto.create.topics = true
 	auto.commit.interval.ms = 5000
@@ -298,6 +320,11 @@ This generated password is for development use only. Your security configuration
 	ssl.truststore.password = null
 	ssl.truststore.type = JKS
 	value.deserializer = class org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+
+
+
+
+	
  
 {"@timestamp":"2026-07-16T12:53:41.9621876+05:30","level":"INFO","service":"ProcessStatusService","traceId":"","userId":"","clientIp":"","apiPath":"","requestUrl":"","httpMethod":"","httpStatus":"","class":"o.a.k.clients.consumer.ConsumerConfig","message":"ConsumerConfig values: \r\n\tallow.auto.create.topics = true\r\n\tauto.commit.interval.ms = 5000\r\n\tauto.include.jmx.reporter = true\r\n\tauto.offset.reset = earliest\r\n\tbootstrap.servers = [kafka-0.kafka.be-test.svc.cluster.local:9092]\r\n\tcheck.crcs = true\r\n\tclient.dns.lookup = use_all_dns_ips\r\n\tclient.id = consumer-Airflow_ETL-1\r\n\tclient.rack = \r\n\tconnections.max.idle.ms = 540000\r\n\tdefault.api.timeout.ms = 60000\r\n\tenable.auto.commit = false\r\n\tenable.metrics.push = true\r\n\texclude.internal.topics = true\r\n\tfetch.max.bytes = 52428800\r\n\tfetch.max.wait.ms = 500\r\n\tfetch.min.bytes = 1\r\n\tgroup.id = Airflow_ETL\r\n\tgroup.instance.id = null\r\n\tgroup.protocol = classic\r\n\tgroup.remote.assignor = null\r\n\theartbeat.interval.ms = 3000\r\n\tinterceptor.classes = []\r\n\tinternal.leave.group.on.close = true\r\n\tinternal.throw.on.fetch.stable.offset.unsupported = false\r\n\tisolation.level = read_uncommitted\r\n\tkey.deserializer = class org.springframework.kafka.support.serializer.ErrorHandlingDeserializer\r\n\tmax.partition.fetch.bytes = 1048576\r\n\tmax.poll.interval.ms = 300000\r\n\tmax.poll.records = 500\r\n\tmetadata.max.age.ms = 300000\r\n\tmetric.reporters = []\r\n\tmetrics.num.samples = 2\r\n\tmetrics.recording.level = INFO\r\n\tmetrics.sample.window.ms = 30000\r\n\tpartition.assignment.strategy = [class org.apache.kafka.clients.consumer.RangeAssignor, class org.apache.kafka.clients.consumer.CooperativeStickyAssignor]\r\n\treceive.buffer.bytes = 65536\r\n\treconnect.backoff.max.ms = 1000\r\n\treconnect.backoff.ms = 50\r\n\trequest.timeout.ms = 30000\r\n\tretry.backoff.max.ms = 1000\r\n\tretry.backoff.ms = 100\r\n\tsasl.client.callback.handler.class = null\r\n\tsasl.jaas.config = null\r\n\tsasl.kerberos.kinit.cmd = /usr/bin/kinit\r\n\tsasl.kerberos.min.time.before.relogin = 60000\r\n\tsasl.kerberos.service.name = null\r\n\tsasl.kerberos.ticket.renew.jitter = 0.05\r\n\tsasl.kerberos.ticket.renew.window.factor = 0.8\r\n\tsasl.login.callback.handler.class = null\r\n\tsasl.login.class = null\r\n\tsasl.login.connect.timeout.ms = null\r\n\tsasl.login.read.timeout.ms = null\r\n\tsasl.login.refresh.buffer.seconds = 300\r\n\tsasl.login.refresh.min.period.seconds = 60\r\n\tsasl.login.refresh.window.factor = 0.8\r\n\tsasl.login.refresh.window.jitter = 0.05\r\n\tsasl.login.retry.backoff.max.ms = 10000\r\n\tsasl.login.retry.backoff.ms = 100\r\n\tsasl.mechanism = GSSAPI\r\n\tsasl.oauthbearer.clock.skew.seconds = 30\r\n\tsasl.oauthbearer.expected.audience = null\r\n\tsasl.oauthbearer.expected.issuer = null\r\n\tsasl.oauthbearer.jwks.endpoint.refresh.ms = 3600000\r\n\tsasl.oauthbearer.jwks.endpoint.retry.backoff.max.ms = 10000\r\n\tsasl.oauthbearer.jwks.endpoint.retry.backoff.ms = 100\r\n\tsasl.oauthbearer.jwks.endpoint.url = null\r\n\tsasl.oauthbearer.scope.claim.name = scope\r\n\tsasl.oauthbearer.sub.claim.name = sub\r\n\tsasl.oauthbearer.token.endpoint.url = null\r\n\tsecurity.protocol = PLAINTEXT\r\n\tsecurity.providers = null\r\n\tsend.buffer.bytes = 131072\r\n\tsession.timeout.ms = 45000\r\n\tsocket.connection.setup.timeout.max.ms = 30000\r\n\tsocket.connection.setup.timeout.ms = 10000\r\n\tssl.cipher.suites = null\r\n\tssl.enabled.protocols = [TLSv1.2, TLSv1.3]\r\n\tssl.endpoint.identification.algorithm = https\r\n\tssl.engine.factory.class = null\r\n\tssl.key.password = null\r\n\tssl.keymanager.algorithm = SunX509\r\n\tssl.keystore.certificate.chain = null\r\n\tssl.keystore.key = null\r\n\tssl.keystore.location = null\r\n\tssl.keystore.password = null\r\n\tssl.keystore.type = JKS\r\n\tssl.protocol = TLSv1.3\r\n\tssl.provider = null\r\n\tssl.secure.random.implementation = null\r\n\tssl.trustmanager.algorithm = PKIX\r\n\tssl.truststore.certificates = null\r\n\tssl.truststore.location = null\r\n\tssl.truststore.password = null\r\n\tssl.truststore.type = JKS\r\n\tvalue.deserializer = class org.springframework.kafka.support.serializer.ErrorHandlingDeserializer\r\n","stack_trace":""}
 2026-07-16 12:53:42.008 [34mINFO [0;39m [[34mmain[0;39m] [33mo.a.k.c.t.i.KafkaMetricsCollector$StateLedger[0;39m: initializing Kafka metrics collector 
@@ -325,6 +352,11 @@ This generated password is for development use only. Your security configuration
 2026-07-16 12:53:51.381 [34mINFO [0;39m [[34mmain[0;39m] [33mc.z.h.HikariDataSource[0;39m: HikariPool-1 - Shutdown completed. 
 {"@timestamp":"2026-07-16T12:53:51.381613+05:30","level":"INFO","service":"ProcessStatusService","traceId":"","userId":"","clientIp":"","apiPath":"","requestUrl":"","httpMethod":"","httpStatus":"","class":"com.zaxxer.hikari.HikariDataSource","message":"HikariPool-1 - Shutdown completed.","stack_trace":""}
 2026-07-16 12:53:51.409 [34mINFO [0;39m [[34mmain[0;39m] [33mo.s.b.a.l.ConditionEvaluationReportLogger[0;39m: 
+
+
+
+
+
 
 Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled. 
 {"@timestamp":"2026-07-16T12:53:51.4098036+05:30","level":"INFO","service":"ProcessStatusService","traceId":"","userId":"","clientIp":"","apiPath":"","requestUrl":"","httpMethod":"","httpStatus":"","class":"o.s.b.a.l.ConditionEvaluationReportLogger","message":"\r\n\r\nError starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.","stack_trace":""}
