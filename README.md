@@ -1,110 +1,179 @@
-spring.application.name=ProcessStatusService
-spring.profiles.active=local
-server.port=9006
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.3.0</version>
+        <relativePath/> <!-- lookup parent from repository -->
+    </parent>
+	<groupId>com.fincore</groupId>
+	<artifactId>ProcessStatus</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<packaging>jar</packaging>
+	<name>process-status-service</name>
+	<description>Service for Status Management</description>
 
-# --- Kafka Consumer Configuration ---
-# We connect to Kafka on the EXTERNAL listener
-spring.kafka.consumer.group-id=Airflow_ETL
-spring.kafka.consumer.auto-offset-reset=earliest
+	<properties>
+		<java.version>21</java.version>
+	</properties>
+	<dependencies>
+<!--		<dependency>-->
+<!--            <groupId>org.springframework.boot</groupId>-->
+<!--            <artifactId>spring-boot-devtools</artifactId>-->
+<!--        </dependency>-->
+        <dependency>
+            <groupId>org.jetbrains</groupId>
+            <artifactId>annotations</artifactId>
+            <version>25.0.0</version>
+            <scope>compile</scope>
+        </dependency>
 
-# --- Debezium JSON Deserialization ---
-# This tells Spring Kafka to parse the incoming JSON into our Java objects (DTOs)
-#spring.kafka.consumer.key-deserializer=org.apache.kafka.common.serialization.StringDeserializer
-#spring.kafka.consumer.value-deserializer=org.springframework.kafka.support.serializer.JsonDeserializer
-#spring.kafka.consumer.properties.spring.json.trusted.packages=*
-#spring.kafka.consumer.properties.spring.json.use.type.headers=false
-#spring.kafka.consumer.properties.spring.json.value.default.type=com.fincore.process_status_service.dto.AirflowDagEvent
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+    		<groupId>org.springframework.boot</groupId>
+    		<artifactId>spring-boot-starter-validation</artifactId>
+		</dependency>
 
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
 
-
-# LOGIN SERVICE KEY
-jwt.secret=bWV0aGlvbnlsdGhyZW9ueWx0aHJlb255bGdsdXRhbWlueWxhbGFueWw=
-
-# --- Redis Configuration ---
-spring.data.redis.host=10.0.17.242
-spring.data.redis.port=6379
-spring.cache.type=redis
-
-
-
-
-# Airflow API Base URL
-#airflow.base-url=http://airflow-api-server.cbops.svc.cluster.local:8080
-
-# Airflow API Version
-airflow.api-version=/api/v2
-
-# Authentication (use environment variables in production)
-airflow.username=admin
-airflow.password=admin
-
-# HTTP Client Timeouts (in milliseconds)
-http.connect-timeout=5000
-http.read-timeout=10000
-
-# Logging Levels
-logging.level.com.example.process=DEBUG
-logging.level.org.springframework.web.reactive.function.client=INFO
-
-# DB Timeouts: Configuration of connection pooling timeouts in application.properties.
-spring.datasource.hikari.connection-timeout=30000
-spring.datasource.hikari.maximum-pool-size=30
-
-
-# --- Actuator Base Config ---
-# Enable the endpoints, but control exposure in specific profile files
-management.endpoints.web.base-path=/actuator
-management.endpoint.health.probes.enabled=true
-management.endpoints.web.exposure.include=health, info, prometheus
-management.endpoint.health.show-details=always
-management.metrics.tags.application=${spring.application.name}
-management.info.env.enabled=true
-
-spring.kafka.producer.key-serializer=org.apache.kafka.common.serialization.StringSerializer
-spring.kafka.producer.value-serializer=org.springframework.kafka.support.serializer.JsonSerializer
-#
-## Optional: Ensures type information is handled correctly in the DLT
-#spring.kafka.producer.properties.spring.json.add.type.headers=true
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
 
 
-spring.kafka.consumer.key-deserializer=org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
-spring.kafka.consumer.value-deserializer=org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
-spring.kafka.consumer.properties.spring.deserializer.key.delegate.class=org.apache.kafka.common.serialization.StringDeserializer
-spring.kafka.consumer.properties.spring.deserializer.value.delegate.class=org.springframework.kafka.support.serializer.JsonDeserializer
-spring.kafka.consumer.properties.spring.json.trusted.packages=*
-spring.kafka.consumer.properties.spring.json.use.type.headers=false
-spring.kafka.consumer.enable-auto-commit=false
-spring.kafka.listener.ack-mode = manual
+        <dependency>
+            <groupId>jakarta.validation</groupId>
+            <artifactId>jakarta.validation-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.oracle.database.jdbc</groupId>
+            <artifactId>ojdbc11</artifactId>
+        </dependency>
+        <dependency>
+    		<groupId>com.fasterxml.jackson.core</groupId>
+    		<artifactId>jackson-databind</artifactId>
+		</dependency>
+        <dependency>
+        <groupId>org.springframework.boot</groupId> 
+        <artifactId>spring-boot-starter-webflux</artifactId>    
+        </dependency>
+ 
+        <dependency >
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-configuration-processor</artifactId>
+        <optional>true</optional>
+        </dependency>
+ 
+ 
+        <dependency>
+        <groupId>org.springframework.retry</groupId>
+        <artifactId>spring-retry</artifactId>
+        </dependency>
+ 
+        <dependency>
+        <groupId>org.springframework</groupId>
+        <artifactId>spring-aspects</artifactId>
+        </dependency>
+		  <dependency>
+            <groupId>com.fincore</groupId>
+            <artifactId>common-utilities</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
+        </dependency>
 
-# ==============================================================
-# JACKSON CONFIGURATION
-# ==============================================================
-#spring.jackson.date-format=dd/MM/yyyy
-spring.jackson.time-zone=Asia/Kolkata
-# Ensure dates are Strings (e.g. "2023-10-01 13:30"), not timestamps (169000...)
-spring.jackson.serialization.write-dates-as-timestamps=false
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
 
 
-# Time in milliseconds
-#30 Seconds
-app.scheduling.fixedRate.in.ms=300000
-app.scheduling.initialDelay.in.ms=600000
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+
+        </dependency>
 
 
-#NiFi
-nifi.username=fincore
-nifi.password=Password#1234
-nifi.base-url=https://10.177.177.93:443/nifi-api
+        <dependency>
+            <groupId>org.springframework.retry</groupId>
+            <artifactId>spring-retry</artifactId>
+        </dependency>
 
-reconciliation.queued-timeout-minutes=30
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-aspects</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>net.logstash.logback</groupId>
+            <artifactId>logstash-logback-encoder</artifactId>
+            <version>7.4</version>
+        </dependency>
+        <dependency>
+            <artifactId>jackson-databind</artifactId>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <version>2.17.2</version>
+        </dependency>
+        <!-- health metrics -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.jcraft</groupId>
+            <artifactId>jsch</artifactId>
+            <version>0.1.55</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>${project.artifactId}</finalName>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>
 
 
 
-#
-##new fix to handle large payload in network gzip
-#server.compression.enabled=true
-#server.compression.mime-types=application/json,text/event-stream
-#server.compression.min-response-size=1024
+package com.fincore.process_status_service;
 
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.retry.annotation.EnableRetry;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
-i have checked in common utilities there are no kafka configuarations
+@EnableRetry
+@EnableScheduling
+@EnableCaching
+@SpringBootApplication
+public class ProcessStatusApplication {
+
+	public static void main(String[] args) {
+		SpringApplication.run(ProcessStatusApplication.class, args);
+	}
+}
