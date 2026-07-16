@@ -1,37 +1,16 @@
-#
-#
-# @author:Sampath [v1017860]
-#
-#
+im using Spring boot tool suite dashboard to run the application 
 
-spring.datasource.url=jdbc:oracle:thin:@10.177.103.192:1523/fincorepdb1
-#spring.datasource.url=jdbc:oracle:thin:@10.177.179.46:1523/fincorepdb1
-spring.datasource.username=fincore
-spring.datasource.password=Password#1234
-spring.datasource.driver-class-name=oracle.jdbc.OracleDriver
+1)@KafkaListener(topics = "airflow-events", groupId = "Airflow_ETL", properties = {
+			"spring.json.value.default.type=com.fincore.process_status_service.dto.AirflowDagEvent" })
+	public void consume(AirflowDagEvent dagEvent) {
+  
+2) @KafkaListener(topics = "nwsa-variance-report.started", groupId = "Report-Batch", properties = "spring.json.value.default.type=com.fincore.process_status_service.dto.NwsaVarianceStartedDTO")
+    public void consumeStarted(NwsaVarianceStartedDTO dto) {
 
-#spring.kafka.consumer.bootstrap-servers=localhost:29092
-#pring.kafka.consumer.bootstrap-servers=10.0.19.100:9092
-#spring.kafka.producer.bootstrap-servers=10.0.19.100:9092
-spring.kafka.bootstrap-servers=localhost:9092
-
-#airflow.base-url=http://localhost:1234/airflow
-airflow.base-url=https://fincoreuat.sbi/airflow22
-#airflow.base-url=https://fincorest.sbi/airflow
+i have added the log you mentioned in application.properties but i didnt get any logs what should i search for 
 
 
-# Time in milliseconds
-#30 Seconds
-app.scheduling.fixedRate.in.ms=9000
-app.scheduling.initialDelay.in.ms=8000
-
-sftp.hostname=10.177.177.112
-sftp.username=root
-sftp.password=root123
-sftp.port=22
+bootstrap.servers , BOOTSTRAP_SERVERS not result but spring.kafka.bootstrap-servers i got only one result which is in local properties file 
 
 
-
-
-
-
+  
