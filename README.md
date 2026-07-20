@@ -1,23 +1,22 @@
-public class MethodOverriding extends Vehicle{
-
-    @Override
-    public static void statementPrinting(String text){
-        System.out.println("Hi this is Runtimepolymorphism in child class  "+text);
-    }
-
-    public static void main (String args[]){
-        statementPrinting("Andy");
+class A{
+    void task(){
+        System.out.println("Hi this is class A");
     }
 }
 
-
-public class Vehicle{
-    String brand ;
-    public void start(){
-        System.out.println("vehicle Started : "+brand);
+class B extends A{
+    @Override
+    void task(){
+        System.out.println("Hi this is class B");
     }
+}
 
-    public static void statementPrinting(String text){
-        System.out.println("text that was about to print in parent class is >>.."+text);
+public class RuntimePolymorphism {
+    public static void main(String[] args) {
+        //A is reference type and B is the object it is pointing it to 
+        //which method is allowed to execute is decided at compile time
+        //which method will be executed will be decided at runtime 
+        A obj = new B();
+        obj.task();
     }
 }
