@@ -1,10 +1,27 @@
-[WARNING]
-[WARNING] Some problems were encountered while building the effective model for com.fincore:ProcessStatus:jar:0.0.1-SNAPSHOT
-[WARNING] 'dependencies.dependency.(groupId:artifactId:type:classifier)' must be unique: org.springframework.boot:spring-boot-starter-webflux:jar -> duplicate declaration of version (?) @ line 93, column 21 
-[WARNING] 'dependencies.dependency.(groupId:artifactId:type:classifier)' must be unique: org.springframework.boot:spring-boot-configuration-processor:jar -> duplicate declaration of version (?) @ line 99, column 21
-[WARNING] 'dependencies.dependency.(groupId:artifactId:type:classifier)' must be unique: org.springframework.retry:spring-retry:jar -> duplicate declaration of version (?) @ line 112, column 21[WARNING] 'dependencies.dependency.(groupId:artifactId:type:classifier)' must be unique: org.springframework:spring-aspects:jar -> duplicate declaration of version (?) @ line 117, column 21
-[WARNING] 'dependencies.dependency.(groupId:artifactId:type:classifier)' must be unique: com.fasterxml.jackson.core:jackson-databind:jar -> version (?) vs 2.17.2 @ line 127, column 21
-[WARNING]
-[WARNING] It is highly recommended to fix these problems because they threaten the stability of your build.
-[WARNING]
-[WARNING] For this reason, future Maven versions might no longer support building such malformed projects.
+ class Mobile {
+    String brand;
+    String model;
+    long price;
+
+    public void call() {
+        System.out.println("calling a brand"+brand);
+        System.out.println("calling a model"+model);
+        System.out.println("calling a price"+price);
+    }
+}
+
+public class SampleObj {
+    public static void main (String args[]) {
+Mobile m1 = new Mobile();
+    m1.brand = "Samsung"; 
+    m1.model ="S12";
+    //m1.price = 42000L;
+    m1.call(); 
+
+    Mobile m2 = new Mobile();
+    m2.brand ="IPhone" ; 
+    m2.model ="Iphone 17 Pro max";
+    m2.price = 142000;
+    m2.call(); 
+    }
+}
