@@ -1,27 +1,34 @@
- class Mobile {
-    String brand;
-    String model;
-    long price;
+ class EmployeeDetails {
+    int id;
+    String name;
+    double salary;
 
-    public void call() {
-        System.out.println("calling a brand"+brand);
-        System.out.println("calling a model"+model);
-        System.out.println("calling a price"+price);
+    EmployeeDetails(int id, String name, double salary){
+        this.id = id;
+        this.name = name;
+        this.salary = salary;
+    }
+
+    public EmployeeDetails() {
+    }
+
+    public void details() {
+        System.out.println("id of the employee : "+id);
+        System.out.println("Name of the employee : "+name);
+        System.out.println("Salary of the employee : "+salary);
     }
 }
 
-public class SampleObj {
+public class Constructors {
     public static void main (String args[]) {
-Mobile m1 = new Mobile();
-    m1.brand = "Samsung"; 
-    m1.model ="S12";
-    //m1.price = 42000L;
-    m1.call(); 
 
-    Mobile m2 = new Mobile();
-    m2.brand ="IPhone" ; 
-    m2.model ="Iphone 17 Pro max";
-    m2.price = 142000;
-    m2.call(); 
-    }
+    EmployeeDetails e1 = new EmployeeDetails();
+    e1.id = 12345; 
+    e1.name ="Andy";
+    e1.salary = 42000;
+    e1.details(); 
+
+  EmployeeDetails e2 = new EmployeeDetails(45678,"lucky",78200);
+    e2.details(); 
+}
 }
