@@ -1,5 +1,28 @@
+package com.fincore.CommunicationService.config;
+
+import java.security.SecureRandom;
+import java.security.cert.X509Certificate;
+
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
+
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.client5.http.ssl.NoopHostnameVerifier;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.ClientHttpRequestFactory;
+import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
+import org.springframework.web.client.RestClient;
+
 @Configuration
-public class RestClientConfig {
+public class RestClientConfig{
+
+    // @Bean
+    // public RestClient restClient(RestClient.Builder builder){
+    //     return builder.build();
+    // }
 
     @Bean
     public RestClient restClient() throws Exception {
@@ -38,9 +61,3 @@ public class RestClientConfig {
                 .build();
     }
 }
-
-
-<dependency>
-    <groupId>org.apache.httpcomponents.client5</groupId>
-    <artifactId>httpclient5</artifactId>
-</dependency>
