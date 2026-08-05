@@ -1,3 +1,33 @@
+class Student {
+
+    String name;
+
+}
+
+public class Demo {
+
+    static void change(Student s) {
+
+        s.name = "Andy";
+
+    }
+
+    public static void main(String[] args) {
+
+        Student st = new Student();
+
+        st.name = "John";
+
+        change(st);
+
+        System.out.println(st.name);
+
+    }
+
+}
+
+
+
 Output?
 Andy
 😲 Wait...
