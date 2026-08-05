@@ -1,6 +1,29 @@
+Output?
+Andy
+😲 Wait...
+Didn't we just say Java is pass by value?
+Yes!
+So why did it change?
+The Secret
+The variable st stores a reference to the object.
+Java copies that reference value.
+main()
 
-<groupId>org.apache.httpcomponents.client5</groupId>
-    <artifactId>httpclient5-parent</artifactId>
-    <version>5.1.3</version>
+st -----------> Student Object
+                  name = John
+When we call:
+change(st);
+Java copies the reference.
+main()              change()
 
-    The type org.apache.hc.core5.io.ModalCloseable cannot be resolved. It is indirectly referenced from required type org.apache.hc.client5.http.impl.classic.CloseableHttpClient
+st ----\
+         \
+          -----> Student Object
+         /
+s ------/
+Both st and s point to the same object.
+So when we do:
+s.name = "Andy";
+We're modifying the same object.
+Output:
+Andy
