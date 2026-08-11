@@ -1,50 +1,77 @@
-class Person{
-    String name;
-    void displayName(){
-        System.out.println("name :: "+name);
+1)class Calculator{
+    void add(int a, int b){
+        int res=a+b;
+        System.out.println("result of 1st method is "+res);
     }
-}
-class Employee extends Person{
-    int employeeId;
-    void displayEmployeeId(){
-        System.out.println("employeeId is:: "+employeeId);
+    void add(int a, int b,int c){
+        int res=a+b+c;
+        System.out.println("result of 2nd method is "+res);
     }
-}
-
-public class Developer extends Employee{
-    String programmingLanguage;
-    void writeCode(){
-        System.out.println("Writing code in "+programmingLanguage);
+    void add(double a , double b){
+        double res=a+b;
+        System.out.println("result of 3rd method is "+res);
     }
 
     public static void main(String[] args) {
-        Developer obj = new Developer();
-        obj.name ="Andy";
-        obj.displayName();
-        obj.employeeId = 12345;
-        obj.displayEmployeeId();
-        obj.programmingLanguage = "JAVA";
-        obj.writeCode();
+        Calculator cal = new Calculator();
+        cal.add(10,20);
+        cal.add(10,20,30);
+        cal.add(1,2);
     }
 }
 
 
+2)
 
-class Parent {
 
-    int x = 10;
+3)
+class Animal1{
+    void sound(){
+        System.out.println("Animal sound");
+    }
 }
 
-public class Child extends Parent {
-
-     int x = 20;
-     void display(){
-        System.out.println(x);
-        System.out.println(super.x);
-     }
+public class Dog1 extends Animal1{
     
-     public static void main(String[] args) {
-        Child obj = new Child();
-        obj.display();
+    @Override
+    void sound(){
+        System.out.println("Dog barks");
     }
-} 
+    public static void main(String[] args) {
+        Dog1 obj = new Dog1();
+        obj.sound();
+    }
+}
+
+
+4)
+class Animal2{
+    void sound(){
+        System.out.println("Animal sound");
+    }
+}
+
+public class Dog2 extends Animal2{
+    
+    @Override
+    void sound(){
+        System.out.println("Dog barks");
+    }
+    public static void main(String[] args) {
+        Animal2 obj= new Dog2();
+        obj.sound();
+    }
+}
+here the reference type is Animal2
+Actual object type is Dog2
+Dog2 sound() executed
+because the reference type is pointing to the Dog2 object so on runtime jvm looks the object it is pointing out is Dog2 and executed the sound()method overridden in Dog2 class 
+
+5)
+A-- compiles and executes the mthods in Dog objct
+B-- compiles and prints method is dog object
+C-- compilation error
+
+
+6)
+it prints the method in child class
