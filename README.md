@@ -1,26 +1,29 @@
-interface Vehicle{
-
-    void start();
+abstract class Payment1{
+    abstract void pay();
 }
 
-class Car implements Vehicle{
+class UPI extends Payment1{
+
     @Override
-    public void start(){
-        System.out.println("Car started");
+    public void pay(){
+        System.err.println("payment processing through UPI");
     }
 }
-class Bike implements Vehicle{
+
+class CreditCard extends Payment1{
+
     @Override
-    public void start(){
-        System.out.println("Bike started");
+    public void pay(){
+        System.err.println("payment processing through CreditCard");
     }
 }
-public class VehicleMain{
+
+public class Payment{
     public static void main(String[] args) {
-        Vehicle v1 = new Car();
-        Vehicle v2 = new Bike();
+        Payment1 p1 = new UPI();
+        Payment1 p2 = new CreditCard();
 
-        v1.start();
-        v2.start();
+        p1.pay();
+        p2.pay();
     }
 }
